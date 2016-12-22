@@ -23,15 +23,21 @@ import org.apache.flink.types.Row
 import java.math.BigDecimal
 import java.math.BigInteger
 
+object test {
+  var count = 0;
+}
+
 abstract class AvgAggregate[T] extends Aggregate[T] {
   protected var partialSumIndex: Int = _
   protected var partialCountIndex: Int = _
+  protected var thirdIndex: Int = _
 
   override def supportPartial: Boolean = true
 
   override def setAggOffsetInRow(aggOffset: Int): Unit = {
     partialSumIndex = aggOffset
     partialCountIndex = aggOffset + 1
+    thirdIndex = aggOffset + 2
   }
 }
 
@@ -40,12 +46,14 @@ abstract class IntegralAvgAggregate[T] extends AvgAggregate[T] {
   override def initiate(partial: Row): Unit = {
     partial.setField(partialSumIndex, 0L)
     partial.setField(partialCountIndex, 0L)
+    partial.setField(thirdIndex, "aaaaa")
   }
 
   override def prepare(value: Any, partial: Row): Unit = {
     if (value == null) {
       partial.setField(partialSumIndex, 0L)
       partial.setField(partialCountIndex, 0L)
+      partial.setField(thirdIndex, "aaaaa")
     } else {
       doPrepare(value, partial)
     }
@@ -66,7 +74,8 @@ abstract class IntegralAvgAggregate[T] extends AvgAggregate[T] {
 
   override def intermediateDataType = Array(
     BasicTypeInfo.LONG_TYPE_INFO,
-    BasicTypeInfo.LONG_TYPE_INFO)
+    BasicTypeInfo.LONG_TYPE_INFO,
+    BasicTypeInfo.STRING_TYPE_INFO)
 
   def doPrepare(value: Any, partial: Row): Unit
 
@@ -78,6 +87,7 @@ class ByteAvgAggregate extends IntegralAvgAggregate[Byte] {
     val input = value.asInstanceOf[Byte]
     partial.setField(partialSumIndex, input.toLong)
     partial.setField(partialCountIndex, 1L)
+    partial.setField(thirdIndex, "aaaaa")
   }
 
   override def doEvaluate(buffer: Row): Any = {
@@ -116,6 +126,7 @@ class IntAvgAggregate extends IntegralAvgAggregate[Int] {
     val input = value.asInstanceOf[Int]
     partial.setField(partialSumIndex, input.toLong)
     partial.setField(partialCountIndex, 1L)
+    partial.setField(thirdIndex, "aaaaa")
   }
 
   override def doEvaluate(buffer: Row): Any = {

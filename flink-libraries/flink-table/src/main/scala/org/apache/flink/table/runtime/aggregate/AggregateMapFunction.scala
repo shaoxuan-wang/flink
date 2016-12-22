@@ -23,9 +23,12 @@ import org.apache.flink.api.java.typeutils.ResultTypeQueryable
 import org.apache.flink.types.Row
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.util.Preconditions
+import org.apache.flink.api.table.functions.AggFunction
 
-class AggregateMapFunction[IN, OUT](
-    private val aggregates: Array[Aggregate[_]],
+
+//参考 flink_flink createFoldInitialValue
+class AggMapFunction[IN, OUT](
+    private val aggregates: Array[AggFunction[_]],
     private val aggFields: Array[Int],
     private val groupingKeys: Array[Int],
     @transient private val returnType: TypeInformation[OUT])
@@ -33,18 +36,59 @@ class AggregateMapFunction[IN, OUT](
   with ResultTypeQueryable[OUT] {
   
   private var output: Row = _
+  private var groupingKeyLenth: Int = _
   
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
     Preconditions.checkNotNull(aggFields)
     Preconditions.checkArgument(aggregates.size == aggFields.size)
-    val partialRowLength = groupingKeys.length +
-        aggregates.map(_.intermediateDataType.length).sum
+    groupingKeyLenth = groupingKeys.length
+    val partialRowLength = groupingKeys.length + aggregates.length
     output = new Row(partialRowLength)
   }
 
   override def map(value: IN): OUT = {
     
+    val input = value.asInstanceOf[Row]
+//    for (i <- 0 until aggregates.length) {
+//      val fieldValue = input.productElement(aggFields(i))
+//      aggregates(i).prepare(fieldValue, output)
+//    }
+//    for (i <- 0 until groupingKeys.length) {
+//      output.setField(i, input.productElement(groupingKeys(i)))
+//    }
+    aggregates.zipWithIndex.foreach{ case (agg, index) =>
+      output.setField(groupingKeys.length + index, agg)
+    }
+    output.asInstanceOf[OUT]
+  }
+
+  override def getProducedType: TypeInformation[OUT] = {
+    returnType
+  }
+}
+
+class AggregateMapFunction[IN, OUT](
+  private val aggregates: Array[Aggregate[_]],
+  private val aggFields: Array[Int],
+  private val groupingKeys: Array[Int],
+  @transient private val returnType: TypeInformation[OUT])
+  extends RichMapFunction[IN, OUT]
+          with ResultTypeQueryable[OUT] {
+
+  private var output: Row = _
+
+  override def open(config: Configuration) {
+    Preconditions.checkNotNull(aggregates)
+    Preconditions.checkNotNull(aggFields)
+    Preconditions.checkArgument(aggregates.size == aggFields.size)
+    val partialRowLength = groupingKeys.length +
+      aggregates.map(_.intermediateDataType.length).sum
+    output = new Row(partialRowLength)
+  }
+
+  override def map(value: IN): OUT = {
+
     val input = value.asInstanceOf[Row]
     for (i <- 0 until aggregates.length) {
       val fieldValue = input.getField(aggFields(i))

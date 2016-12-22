@@ -21,8 +21,13 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.fun.SqlStdOperatorTable
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilder.AggCall
-import org.apache.flink.api.common.typeinfo.BasicTypeInfo
-import org.apache.flink.table.typeutils.TypeCheckUtils
+import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
+import org.apache.flink.api.table.TableException
+import org.apache.flink.api.table.functions.AggFunction
+import org.apache.flink.api.table.typeutils.TypeCheckUtils
+import org.apache.flink.api.table.typeutils.TypeCheckUtils.isTypeMatch
+import org.apache.flink.api.table.validate._
+import org.apache.flink.api.table.functions.utils.AggSqlFunctionObj
 
 abstract sealed class Aggregation extends UnaryExpression {
 
@@ -97,4 +102,39 @@ case class Avg(child: Expression) extends Aggregation {
 
   override private[flink] def validateInput() =
     TypeCheckUtils.assertNumericExpr(child.resultType, "avg")
+}
+
+case class UDAFExpr[T: TypeInformation](udaf: AggFunction[T], child: Expression) extends Aggregation {
+
+  // Override makeCopy method in TreeNode, to produce vargars properly
+  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
+    if (newArgs.length < 1) {
+      throw new TableException("Invalid constructor params")
+    }
+    val udtfParam = newArgs.head.asInstanceOf[AggFunction[T]]
+    val newArg = newArgs.last.asInstanceOf[Expression]
+    new UDAFExpr(udtfParam, newArg).asInstanceOf[this.type]
+  }
+
+  override def resultType: TypeInformation[_] = implicitly[TypeInformation[T]]
+
+  override def validateInput(): ValidationResult = {
+    if (isTypeMatch(Seq(resultType), Seq(child.resultType), isVarArgs = false)) {
+      ValidationSuccess
+    } else {
+      val inputType = child.resultType.getTypeClass.getSimpleName
+      val operandType = resultType.getTypeClass.getSimpleName
+      val udafName = udaf.getClass.getSimpleName
+      ValidationFailure(
+        s"Cannot apply '$udafName' to arguments of type '$udafName(<$inputType>)'." +
+          s" Supported form(s): '$udafName(<$operandType>)'")
+    }
+  }
+
+  override def toString(): String = s"${udaf.getClass.getSimpleName}($child)"
+
+  override def toAggCall(name: String)(implicit relBuilder: RelBuilder): AggCall = {
+    val sqlFunction = AggSqlFunctionObj.create(name, udaf, resultType, resultType)
+    relBuilder.aggregateCall(sqlFunction, false, null, name, child.toRexNode)
+  }
 }
