@@ -19,7 +19,7 @@ package org.apache.flink.table.typeutils
 
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo.{BIG_DEC_TYPE_INFO, BOOLEAN_TYPE_INFO, INT_TYPE_INFO, STRING_TYPE_INFO}
 import org.apache.flink.api.common.typeinfo._
-import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
+import org.apache.flink.api.java.typeutils.{GenericTypeInfo, ObjectArrayTypeInfo}
 import org.apache.flink.table.validate._
 
 object TypeCheckUtils {
@@ -89,6 +89,47 @@ object TypeCheckUtils {
       ValidationSuccess
     } else {
       ValidationFailure(s"$caller requires orderable types, get $dataType here")
+    }
+  }
+
+  /**
+    * check whether the input type is match the operand types of the method
+    *
+    * @param operandTypes method param types
+    * @param inputTypes input types
+    * @param isVarArgs whether this method has var args
+    * @return
+    */
+  def isTypeMatch(operandTypes: Seq[TypeInformation[_]],
+      inputTypes: Seq[TypeInformation[_]],
+      isVarArgs: Boolean): Boolean = {
+    if (!isVarArgs && operandTypes.length == inputTypes.length) {
+      operandTypes.zip(inputTypes).forall {
+        case (o: BasicTypeInfo[_], i: BasicTypeInfo[_]) => o == i || i.shouldAutocastTo(o)
+        case (o: GenericTypeInfo[Object], _) => true
+      }
+    } else if (isVarArgs) {
+      val varArgType = operandTypes.last
+      val componentType = varArgType match {
+        case o: BasicArrayTypeInfo[_, _] => o.getComponentInfo
+        case o: PrimitiveArrayTypeInfo[_] => o.getComponentType
+      }
+      for ((inputType, index) <- inputTypes.zipWithIndex) {
+        if (index < operandTypes.length - 1) {
+          if (operandTypes(index) != inputType
+            && !TypeCoercion.canAutoCast(inputType, operandTypes(index))) {
+            return false
+          }
+        } else {
+          if (componentType != inputType
+            && !TypeCoercion.canAutoCast(inputType, componentType)) {
+            return false
+          }
+        }
+      }
+      true
+    } else {
+      false
     }
   }
 }

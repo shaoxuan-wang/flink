@@ -34,7 +34,8 @@ import org.apache.flink.types.Row
  *
  * The intermediate aggregate value is stored inside Row, aggOffsetInRow is used as the start
  * field index in Row, so different aggregate functions could share the same Row as intermediate
- * aggregate value/aggregate buffer, as their aggregate values could be stored in distinct fields
+ * aggregate value/aggregate buffer, as their aggreg阿哥gregateate values could be stored in distinct
+  * fields
  * of Row with no conflict. The intermediate aggregate value is required to be a sequence of JVM
  * primitives, and Flink use intermediateDataType() to get its data types in SQL side.
  *

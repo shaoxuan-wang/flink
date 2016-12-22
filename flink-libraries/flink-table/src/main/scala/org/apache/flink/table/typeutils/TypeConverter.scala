@@ -18,10 +18,14 @@
 
 package org.apache.flink.table.typeutils
 
+import java.lang.reflect.Method
+
 import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.rel.core.JoinRelType
 import org.apache.calcite.rel.core.JoinRelType._
-import org.apache.flink.api.common.typeinfo.{AtomicType, TypeInformation}
+import org.apache.calcite.sql.SqlFunctionCategory
+import org.apache.calcite.sql.`type`._
+import org.apache.flink.api.common.typeinfo._
 import org.apache.flink.api.common.typeutils.CompositeType
 import org.apache.flink.api.java.operators.join.JoinType
 import org.apache.flink.api.java.tuple.Tuple
@@ -35,6 +39,46 @@ import scala.collection.JavaConversions._
 object TypeConverter {
 
   val DEFAULT_ROW_TYPE = new RowTypeInfo().asInstanceOf[TypeInformation[Any]]
+
+  def methodReturnTypeToTypeInfo(method: Method): TypeInformation[_] ={
+    val ret = method.getReturnType
+    TypeInformation.of(ret)
+  }
+
+  def methodParameterTypeToTypeInfo(method: Method) : Seq[TypeInformation[_]] = {
+    val operands = method.getParameterTypes
+    operands.map(o => TypeInformation.of(o))
+  }
+
+  def typeInfoToTypeChecker(typeInfos: Seq[TypeInformation[_]]): SqlSingleOperandTypeChecker = {
+    val types: Seq[SqlTypeFamily] = typeInfos.map({
+      case o if o.isInstanceOf[NumericTypeInfo[_]] => SqlTypeFamily.NUMERIC
+      case BasicTypeInfo.STRING_TYPE_INFO => SqlTypeFamily.STRING
+      case BasicTypeInfo.DATE_TYPE_INFO | SqlTimeTypeInfo.DATE => SqlTypeFamily.DATETIME
+      case _ => SqlTypeFamily.ANY
+    })
+    OperandTypes.family(types)
+  }
+
+  def typeInfoToTypeInference(typeInfo: TypeInformation[_]): SqlReturnTypeInference = {
+    typeInfo match {
+      case BasicTypeInfo.LONG_TYPE_INFO => ReturnTypes.BIGINT_NULLABLE
+      case BasicTypeInfo.STRING_TYPE_INFO => ReturnTypes.VARCHAR_2000
+      case ti if ti.isInstanceOf[IntegerTypeInfo[_]] => ReturnTypes.INTEGER_NULLABLE
+      case ti if ti.isInstanceOf[FractionalTypeInfo[_]] => ReturnTypes.DOUBLE_NULLABLE
+      case BasicTypeInfo.DATE_TYPE_INFO => ReturnTypes.DATE
+      case _ => throw new TableException(s"failed to infer type from $typeInfo")
+    }
+  }
+
+  def typeInfoToSqlFunctionCategory(typeInfo: TypeInformation[_]) : SqlFunctionCategory = {
+    typeInfo match {
+      case ti if ti.isInstanceOf[NumericTypeInfo[_]] => SqlFunctionCategory.NUMERIC
+      case BasicTypeInfo.STRING_TYPE_INFO => SqlFunctionCategory.STRING
+      case BasicTypeInfo.DATE_TYPE_INFO | SqlTimeTypeInfo.DATE => SqlFunctionCategory.TIMEDATE
+      case _ => SqlFunctionCategory.SYSTEM
+    }
+  }
 
   /**
     * Determines the return type of Flink operators based on the logical fields, the expected
