@@ -22,9 +22,11 @@ import org.apache.flink.types.Row
 
 class CountAggregate extends Aggregate[Long] {
   private var countIndex: Int = _
+  var count: Int = 0
 
   override def initiate(intermediate: Row): Unit = {
     intermediate.setField(countIndex, 0L)
+    count = 0
   }
 
   override def merge(intermediate: Row, buffer: Row): Unit = {
@@ -33,8 +35,18 @@ class CountAggregate extends Aggregate[Long] {
     buffer.setField(countIndex, partialCount + bufferCount)
   }
 
+  override def accumulate(input: Any): Unit = {
+    if (input != null) {
+      count += 1
+    }
+  }
+
   override def evaluate(buffer: Row): Long = {
     buffer.getField(countIndex).asInstanceOf[Long]
+  }
+
+  override def myEvaluate(input: Any): Long = {
+    count
   }
 
   override def prepare(value: Any, intermediate: Row): Unit = {

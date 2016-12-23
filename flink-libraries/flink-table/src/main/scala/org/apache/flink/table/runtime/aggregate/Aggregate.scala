@@ -94,4 +94,8 @@ trait Aggregate[T] extends Serializable {
     * @return True if the aggregate supports partial aggregation, False otherwise.
     */
   def supportPartial: Boolean = false
+
+  def accumulate(input: Any)
+
+  def myEvaluate(input: Any): T
 }
