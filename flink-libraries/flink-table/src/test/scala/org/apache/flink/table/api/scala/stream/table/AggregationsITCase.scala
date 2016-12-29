@@ -31,6 +31,8 @@ import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase
 import org.apache.flink.table.api.TableEnvironment
 import org.junit.Assert._
 import org.junit.Test
+import org.apache.flink.table.api.scala.stream.utils.StreamTestData
+//import org.apache.flink.table.runtime.aggregate.firstUDAF
 
 import scala.collection.mutable
 
@@ -46,6 +48,63 @@ class AggregationsITCase extends StreamingMultipleProgramsTestBase {
     (4L, 2, "Hello"),
     (8L, 3, "Hello world"),
     (16L, 3, "Hello world"))
+
+
+//    def getSmall3TupleDataStream(env: StreamExecutionEnvironment): DataStream[(Int, Long, String)] = {
+//      val data = new mutable.MutableList[(Int, Long, String)]
+//      data.+=((1, 1L, "Hi"))
+//      data.+=((2, 2L, "Hello"))
+//      data.+=((3, 2L, "Hello world"))
+//      env.fromCollection(data)
+//    }
+//  @Test
+//  def testGroupedUserDefinedAggregate(): Unit = {
+//    val env = StreamExecutionEnvironment.getExecutionEnvironment
+//    //env.setParallelism(1)
+//    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+//    val tEnv = TableEnvironment.getTableEnvironment(env)
+//    StreamITCase.testResults = mutable.MutableList()
+//
+//    val first = new firstUDAF
+//
+//    val t = StreamTestData.getSmall3TupleDataStream(env)
+//            .toTable(tEnv, 'a, 'b, 'c)
+//            .groupBy('b)
+//            .window(Slide over 2.rows every 1.rows)
+//            .select('b, first('c))
+//    //.select('b, 'c.count)
+//
+//    val results = t.toDataStream[Row]
+//    results.addSink(new StreamITCase.StringSink)
+//    env.execute()
+//
+//    val expected = mutable.MutableList("1,1", "2,1", "2,2")
+//
+//    assertEquals(expected.sorted, StreamITCase.testResults.sorted)
+//  }
+
+  @Test
+  def mytest(): Unit = {
+    val env = StreamExecutionEnvironment.getExecutionEnvironment
+    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+    val tEnv = TableEnvironment.getTableEnvironment(env)
+    StreamITCase.testResults = mutable.MutableList()
+
+    val stream = env.fromCollection(data)
+    val table = stream.toTable(tEnv, 'long, 'int, 'string)
+
+    val windowedTable = table
+                        .groupBy('string)
+                        .window(Slide over 2.rows every 1.rows)
+                        .select('string, 'int.count)
+
+    val results = windowedTable.toDataStream[Row]
+    results.addSink(new StreamITCase.StringSink)
+    env.execute()
+
+    val expected = Seq("Hello world,1", "Hello world,2", "Hello,1", "Hello,2", "Hi,1")
+    assertEquals(expected.sorted, StreamITCase.testResults.sorted)
+  }
 
   @Test
   def testProcessingTimeSlidingGroupWindowOverCount(): Unit = {
@@ -178,6 +237,7 @@ class AggregationsITCase extends StreamingMultipleProgramsTestBase {
       "Hi,1,1970-01-01 00:00:00.0,1970-01-01 00:00:00.01,1970-01-01 00:00:00.0")
     assertEquals(expected.sorted, StreamITCase.testResults.sorted)
   }
+
 }
 
 object GroupWindowITCase {
