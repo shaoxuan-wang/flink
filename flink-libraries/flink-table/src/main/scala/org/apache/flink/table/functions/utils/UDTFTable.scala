@@ -4,6 +4,7 @@ import org.apache.flink.table.api.Table
 import org.apache.flink.table.expressions.Expression
 
 /**
-  * Created by wshaoxuan on 29/12/2016.
+  * Wrapper class which wraps the expression of an User-Defined Table Function (UDTF), such that
+  * UDTF can use the existing join and leftjoin APIs in [[Table]].
   */
 class UDTFTable(private[flink] val udtf: Expression) extends Table(null,null)

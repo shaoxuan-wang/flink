@@ -24,7 +24,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.expressions.{Expression, TableFunctionExpression}
 
 /**
-  * Base class for a user-defined table function (UDTF). A user-defined table functions works on
+  * Base class for a user-defined table function (UDTF). A user-defined table function works on
   * zero, one, or multiple scalar values as input and returns multiple rows as output.
   *
   * The behavior of a [[TableFunction]] can be defined by implementing a custom evaluation
@@ -68,7 +68,7 @@ import org.apache.flink.table.expressions.{Expression, TableFunctionExpression}
   *
   *   // for Java users
   *   tEnv.registerFunction("split", new Split())   // register table function first
-  *   table.join("split(a) as (s)").select("a, s")
+  *   table.join(tableApply("split(a) as (s)")).select("a, s")
   *
   *   // for SQL users
   *   tEnv.registerFunction("split", new Split())   // register table function first
