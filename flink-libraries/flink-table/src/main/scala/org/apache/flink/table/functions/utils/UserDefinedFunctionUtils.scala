@@ -340,7 +340,8 @@ object UserDefinedFunctionUtils {
     candidate == classOf[Timestamp] && expected == classOf[Long]
 
   /**
-    * An utility function to wrap the user defined table function as a Table. This
+    * This method is dedicated to User-Defined Table Function. It converts java string to
+    * expression, and creates a UDTFTable with expression wrapped.
     */
   def tableApply(udtf: String): Table = {
     new UDTFTable(ExpressionParser.parseExpression(udtf))

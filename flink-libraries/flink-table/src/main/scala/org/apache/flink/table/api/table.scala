@@ -695,11 +695,6 @@ class Table(
     new Table(tableEnv, Limit(offset, fetch, logicalPlan).validate(tableEnv))
   }
 
-  private def udtfJoin(udtfString: String, joinType: JoinType): Table = {
-    val udtf = ExpressionParser.parseExpression(udtfString)
-    udtfJoin(udtf, joinType)
-  }
-
   private def udtfJoin(udtf: Expression, joinType: JoinType): Table = {
     var alias: Option[Seq[String]] = None
 
