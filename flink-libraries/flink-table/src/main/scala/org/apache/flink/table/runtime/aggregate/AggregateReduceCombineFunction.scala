@@ -38,12 +38,14 @@ import scala.collection.JavaConversions._
  *                         index in output Row.
  */
 class AggregateReduceCombineFunction(
+    private val aggFields: Array[Int],
     private val aggregates: Array[Aggregate[_ <: Any]],
     private val groupKeysMapping: Array[(Int, Int)],
     private val aggregateMapping: Array[(Int, Int)],
     private val intermediateRowArity: Int,
     private val finalRowArity: Int)
   extends AggregateReduceGroupFunction(
+    aggFields,
     aggregates,
     groupKeysMapping,
     aggregateMapping,
