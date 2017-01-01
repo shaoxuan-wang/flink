@@ -101,7 +101,7 @@ case class ScalarFunctionCall(
   * @param parameters actual parameters of function
   * @param resultType type information of returned table
   */
-case class TableFunctionCall(
+case class TableFunctionExpression(
     functionName: String,
     tableFunction: TableFunction[_],
     parameters: Seq[Expression],
@@ -119,8 +119,23 @@ case class TableFunctionCall(
     * @param aliasList alias for this table function's returned fields
     * @return this table function call
     */
-  private[flink] def as(aliasList: Option[Seq[String]]): TableFunctionCall = {
-    this.aliases = aliasList
+  def copyAliasList(aliasList: Option[Seq[String]]): TableFunctionExpression = {
+    if (this.aliases == None) {
+      this.aliases = aliasList
+    }
+    this
+  }
+
+  /**
+    * Save the names for the resulting fields of a TableFunction
+    *
+    * @param name name for one field
+    * @param extraNames additional names if the expression expands to multiple fields
+    * @return this table function call
+    */
+  def as(name: Symbol, extraNames: Symbol*): TableFunctionExpression = {
+    val alias = Some(Seq(name.name) ++ extraNames.map(_.name))
+    this.aliases = alias.asInstanceOf[Option[Seq[String]]]
     this
   }
 

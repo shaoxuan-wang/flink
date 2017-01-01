@@ -94,7 +94,7 @@ class FunctionCatalog {
           .asInstanceOf[TableSqlFunction]
         val typeInfo = tableSqlFunction.getRowTypeInfo
         val function = tableSqlFunction.getTableFunction
-        TableFunctionCall(name, function, children, typeInfo)
+        TableFunctionExpression(name, function, children, typeInfo)
 
       // general expression call
       case expression if classOf[Expression].isAssignableFrom(expression) =>
