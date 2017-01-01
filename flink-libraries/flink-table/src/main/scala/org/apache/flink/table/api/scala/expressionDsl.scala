@@ -26,6 +26,9 @@ import org.apache.flink.table.expressions.TimeIntervalUnit.TimeIntervalUnit
 import org.apache.flink.table.expressions._
 import java.math.{BigDecimal => JBigDecimal}
 
+import org.apache.flink.table.api.Table
+import org.apache.flink.table.functions.utils.UDTFTable
+
 import scala.language.implicitConversions
 
 /**
@@ -99,7 +102,7 @@ trait ImplicitExpressionOperations {
   def cast(toType: TypeInformation[_]) = Cast(expr, toType)
 
   /**
-    * Specifies a name for an expression i.e. a field.
+    * Specifies the names of the results for an expression i.e. one or multiple fields.
     *
     * @param name name for one field
     * @param extraNames additional names if the expression expands to multiple fields
@@ -572,6 +575,12 @@ trait ImplicitExpressionConversions {
   implicit def sqlTimestamp2Literal(sqlTimestamp: Timestamp): Expression =
     Literal(sqlTimestamp)
   implicit def array2ArrayConstructor(array: Array[_]): Expression = convertArray(array)
+
+  /**
+    * This implicit is intend to pass user defined TableFunction expression to a Table, such that
+    * it can leverage the traditional and exisiting Table join interfaces.
+    */
+  implicit def UDTFExpressionToTable(expr: TableFunctionExpression): Table = new UDTFTable(expr)
 }
 
 // ------------------------------------------------------------------------------------------------

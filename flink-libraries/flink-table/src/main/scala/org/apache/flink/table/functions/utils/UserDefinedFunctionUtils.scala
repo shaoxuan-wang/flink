@@ -29,7 +29,8 @@ import org.apache.flink.api.common.typeinfo.{AtomicType, TypeInformation}
 import org.apache.flink.api.common.typeutils.CompositeType
 import org.apache.flink.api.java.typeutils.TypeExtractor
 import org.apache.flink.table.calcite.FlinkTypeFactory
-import org.apache.flink.table.api.{TableException, ValidationException}
+import org.apache.flink.table.api.{Table, TableException, ValidationException}
+import org.apache.flink.table.expressions.ExpressionParser
 import org.apache.flink.table.functions.{ScalarFunction, TableFunction, UserDefinedFunction}
 import org.apache.flink.table.plan.schema.FlinkTableFunctionImpl
 import org.apache.flink.util.InstantiationUtil
@@ -338,4 +339,11 @@ object UserDefinedFunctionUtils {
     candidate == classOf[Time] && expected == classOf[Int] ||
     candidate == classOf[Timestamp] && expected == classOf[Long]
 
+  /**
+    * This method is dedicated to User-Defined Table Function. It converts java string to
+    * expression, and creates a UDTFTable with expression wrapped.
+    */
+  def tableApply(udtf: String): Table = {
+    new UDTFTable(ExpressionParser.parseExpression(udtf))
+  }
 }
