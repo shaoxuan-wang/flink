@@ -60,7 +60,7 @@ class UserDefinedTableFunctionTest extends TableTestBase {
 
     // test left outer join
     scalaTable = in1.leftOuterJoin(func1('c) as 's).select('c, 's)
-    javaTable = in2.leftOuterJoin("as(func1(c), s)").select("c, s")
+    javaTable = in2.leftOuterJoin(tableApply("as(func1(c), s)")).select("c, s")
     verifyTableEquals(scalaTable, javaTable)
 
     // test overloading

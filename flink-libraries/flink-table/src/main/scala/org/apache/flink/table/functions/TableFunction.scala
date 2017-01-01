@@ -21,7 +21,7 @@ package org.apache.flink.table.functions
 import java.util
 
 import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.table.expressions.{Expression, TableFunctionCall}
+import org.apache.flink.table.expressions.{Expression, TableFunctionExpression}
 
 /**
   * Base class for a user-defined table function (UDTF). A user-defined table functions works on
@@ -84,15 +84,15 @@ abstract class TableFunction[T] extends UserDefinedFunction {
     * Creates a call to a [[TableFunction]] in Scala Table API.
     *
     * @param params actual parameters of function
-    * @return [[Expression]] in form of a [[TableFunctionCall]]
+    * @return [[Expression]] in form of a [[TableFunctionExpression]]
     */
-  final def apply(params: Expression*)(implicit typeInfo: TypeInformation[T]): Expression = {
+  final def apply(params: Expression*)(implicit typeInfo: TypeInformation[T]): TableFunctionExpression = {
     val resultType = if (getResultType == null) {
       typeInfo
     } else {
       getResultType
     }
-    TableFunctionCall(getClass.getSimpleName, this, params, resultType)
+    TableFunctionExpression(getClass.getSimpleName, this, params, resultType)
   }
 
   override def toString: String = getClass.getCanonicalName
