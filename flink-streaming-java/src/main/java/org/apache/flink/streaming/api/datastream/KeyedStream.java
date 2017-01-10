@@ -34,7 +34,7 @@ import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.RichProcessFunction;
-import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction;
+import org.apache.flink.streaming.api.functions.aggregation.BuiltinAggregator;
 import org.apache.flink.streaming.api.functions.aggregation.ComparableAggregator;
 import org.apache.flink.streaming.api.functions.aggregation.SumAggregator;
 import org.apache.flink.streaming.api.functions.query.QueryableAppendingStateOperator;
@@ -408,7 +408,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> min(int positionToMin) {
-		return aggregate(new ComparableAggregator<>(positionToMin, getType(), AggregationFunction.AggregationType.MIN,
+		return aggregate(new ComparableAggregator<>(positionToMin, getType(), BuiltinAggregator.AggregationType.MIN,
 				getExecutionConfig()));
 	}
 
@@ -430,7 +430,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> min(String field) {
-		return aggregate(new ComparableAggregator<>(field, getType(), AggregationFunction.AggregationType.MIN,
+		return aggregate(new ComparableAggregator<>(field, getType(), BuiltinAggregator.AggregationType.MIN,
 				false, getExecutionConfig()));
 	}
 
@@ -446,7 +446,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> max(int positionToMax) {
-		return aggregate(new ComparableAggregator<>(positionToMax, getType(), AggregationFunction.AggregationType.MAX,
+		return aggregate(new ComparableAggregator<>(positionToMax, getType(), BuiltinAggregator.AggregationType.MAX,
 				getExecutionConfig()));
 	}
 
@@ -468,7 +468,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> max(String field) {
-		return aggregate(new ComparableAggregator<>(field, getType(), AggregationFunction.AggregationType.MAX,
+		return aggregate(new ComparableAggregator<>(field, getType(), BuiltinAggregator.AggregationType.MAX,
 				false, getExecutionConfig()));
 	}
 
@@ -494,7 +494,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 */
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public SingleOutputStreamOperator<T> minBy(String field, boolean first) {
-		return aggregate(new ComparableAggregator(field, getType(), AggregationFunction.AggregationType.MINBY,
+		return aggregate(new ComparableAggregator(field, getType(), BuiltinAggregator.AggregationType.MINBY,
 				first, getExecutionConfig()));
 	}
 
@@ -519,7 +519,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> maxBy(String field, boolean first) {
-		return aggregate(new ComparableAggregator<>(field, getType(), AggregationFunction.AggregationType.MAXBY,
+		return aggregate(new ComparableAggregator<>(field, getType(), BuiltinAggregator.AggregationType.MAXBY,
 				first, getExecutionConfig()));
 	}
 
@@ -575,7 +575,7 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> minBy(int positionToMinBy, boolean first) {
-		return aggregate(new ComparableAggregator<T>(positionToMinBy, getType(), AggregationFunction.AggregationType.MINBY, first,
+		return aggregate(new ComparableAggregator<T>(positionToMinBy, getType(), BuiltinAggregator.AggregationType.MINBY, first,
 				getExecutionConfig()));
 	}
 
@@ -631,11 +631,11 @@ public class KeyedStream<T, KEY> extends DataStream<T> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> maxBy(int positionToMaxBy, boolean first) {
-		return aggregate(new ComparableAggregator<>(positionToMaxBy, getType(), AggregationFunction.AggregationType.MAXBY, first,
+		return aggregate(new ComparableAggregator<>(positionToMaxBy, getType(), BuiltinAggregator.AggregationType.MAXBY, first,
 				getExecutionConfig()));
 	}
 
-	protected SingleOutputStreamOperator<T> aggregate(AggregationFunction<T> aggregate) {
+	protected SingleOutputStreamOperator<T> aggregate(BuiltinAggregator<T> aggregate) {
 		StreamGroupedReduce<T> operator = new StreamGroupedReduce<T>(
 				clean(aggregate), getType().createSerializer(getExecutionConfig()));
 		return transform("Keyed Aggregation", getType(), operator);

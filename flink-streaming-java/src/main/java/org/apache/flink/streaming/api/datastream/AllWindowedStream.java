@@ -32,7 +32,7 @@ import org.apache.flink.api.java.Utils;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction;
+import org.apache.flink.streaming.api.functions.aggregation.BuiltinAggregator;
 import org.apache.flink.streaming.api.functions.aggregation.ComparableAggregator;
 import org.apache.flink.streaming.api.functions.aggregation.SumAggregator;
 import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
@@ -747,7 +747,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> min(int positionToMin) {
-		return aggregate(new ComparableAggregator<>(positionToMin, input.getType(), AggregationFunction.AggregationType.MIN, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(positionToMin, input.getType(), BuiltinAggregator.AggregationType.MIN, input.getExecutionConfig()));
 	}
 
 	/**
@@ -764,7 +764,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> min(String field) {
-		return aggregate(new ComparableAggregator<>(field, input.getType(), AggregationFunction.AggregationType.MIN, false, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(field, input.getType(), BuiltinAggregator.AggregationType.MIN, false, input.getExecutionConfig()));
 	}
 
 	/**
@@ -803,7 +803,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> minBy(int positionToMinBy, boolean first) {
-		return aggregate(new ComparableAggregator<>(positionToMinBy, input.getType(), AggregationFunction.AggregationType.MINBY, first, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(positionToMinBy, input.getType(), BuiltinAggregator.AggregationType.MINBY, first, input.getExecutionConfig()));
 	}
 
 	/**
@@ -818,7 +818,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> minBy(String field, boolean first) {
-		return aggregate(new ComparableAggregator<>(field, input.getType(), AggregationFunction.AggregationType.MINBY, first, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(field, input.getType(), BuiltinAggregator.AggregationType.MINBY, first, input.getExecutionConfig()));
 	}
 
 	/**
@@ -829,7 +829,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> max(int positionToMax) {
-		return aggregate(new ComparableAggregator<>(positionToMax, input.getType(), AggregationFunction.AggregationType.MAX, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(positionToMax, input.getType(), BuiltinAggregator.AggregationType.MAX, input.getExecutionConfig()));
 	}
 
 	/**
@@ -843,7 +843,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> max(String field) {
-		return aggregate(new ComparableAggregator<>(field, input.getType(), AggregationFunction.AggregationType.MAX, false, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(field, input.getType(), BuiltinAggregator.AggregationType.MAX, false, input.getExecutionConfig()));
 	}
 
 	/**
@@ -883,7 +883,7 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> maxBy(int positionToMaxBy, boolean first) {
-		return aggregate(new ComparableAggregator<>(positionToMaxBy, input.getType(), AggregationFunction.AggregationType.MAXBY, first, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(positionToMaxBy, input.getType(), BuiltinAggregator.AggregationType.MAXBY, first, input.getExecutionConfig()));
 	}
 
 	/**
@@ -898,10 +898,10 @@ public class AllWindowedStream<T, W extends Window> {
 	 * @return The transformed DataStream.
 	 */
 	public SingleOutputStreamOperator<T> maxBy(String field, boolean first) {
-		return aggregate(new ComparableAggregator<>(field, input.getType(), AggregationFunction.AggregationType.MAXBY, first, input.getExecutionConfig()));
+		return aggregate(new ComparableAggregator<>(field, input.getType(), BuiltinAggregator.AggregationType.MAXBY, first, input.getExecutionConfig()));
 	}
 
-	private SingleOutputStreamOperator<T> aggregate(AggregationFunction<T> aggregator) {
+	private SingleOutputStreamOperator<T> aggregate(BuiltinAggregator<T> aggregator) {
 		return reduce(aggregator);
 	}
 

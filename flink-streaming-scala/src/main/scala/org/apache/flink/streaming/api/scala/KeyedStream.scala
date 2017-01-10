@@ -25,7 +25,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.common.typeutils.TypeSerializer
 import org.apache.flink.streaming.api.datastream.{QueryableStateStream, DataStream => JavaStream, KeyedStream => KeyedJavaStream, WindowedStream => WindowedJavaStream}
 import org.apache.flink.streaming.api.functions.{ProcessFunction, RichProcessFunction}
-import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction.AggregationType
+import org.apache.flink.streaming.api.functions.aggregation.BuiltinAggregator.AggregationType
 import org.apache.flink.streaming.api.functions.aggregation.{ComparableAggregator, SumAggregator}
 import org.apache.flink.streaming.api.functions.query.{QueryableAppendingStateOperator, QueryableValueStateOperator}
 import org.apache.flink.streaming.api.operators.StreamGroupedReduce
@@ -303,8 +303,7 @@ class KeyedStream[T, K](javaStream: KeyedJavaStream[T, K]) extends DataStream[T]
    *            Tuple types, Scala case classes, and primitive types (which is considered
    *            as having one field).
    */
-  def minBy(position: Int): DataStream[T] = aggregate(AggregationType
-    .MINBY, position)
+  def minBy(position: Int): DataStream[T] = aggregate(AggregationType.MINBY, position)
     
    /**
     * Applies an aggregation that that gives the current minimum element of the data stream by
@@ -319,8 +318,7 @@ class KeyedStream[T, K](javaStream: KeyedJavaStream[T, K]) extends DataStream[T]
     *            Furthermore "*" can be specified in case of a basic type
     *            (which is considered as having only one field).
     */
-  def minBy(field: String): DataStream[T] = aggregate(AggregationType
-    .MINBY, field )
+  def minBy(field: String): DataStream[T] = aggregate(AggregationType.MINBY, field)
 
    /**
     * Applies an aggregation that that gives the current maximum element of the data stream by

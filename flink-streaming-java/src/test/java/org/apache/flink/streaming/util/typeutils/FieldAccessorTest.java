@@ -34,7 +34,7 @@ import org.junit.Test;
 
 public class FieldAccessorTest {
 
-	// Note, that AggregationFunctionTest indirectly also tests FieldAccessors.
+	// Note, that BuiltinAggregatorTest indirectly also tests FieldAccessors.
 	// ProductFieldAccessors are tested in CaseClassFieldAccessorTest.
 
 	@Test

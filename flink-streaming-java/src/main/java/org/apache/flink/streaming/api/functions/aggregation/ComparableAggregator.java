@@ -24,7 +24,7 @@ import org.apache.flink.streaming.util.typeutils.FieldAccessor;
 import org.apache.flink.streaming.util.typeutils.FieldAccessorFactory;
 
 @Internal
-public class ComparableAggregator<T> extends AggregationFunction<T> {
+public class ComparableAggregator<T> extends BuiltinAggregator<T> {
 
 	private static final long serialVersionUID = 1L;
 

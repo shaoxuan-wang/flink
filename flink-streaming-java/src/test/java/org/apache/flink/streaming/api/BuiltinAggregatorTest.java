@@ -34,7 +34,7 @@ import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
-import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction.AggregationType;
+import org.apache.flink.streaming.api.functions.aggregation.BuiltinAggregator.AggregationType;
 import org.apache.flink.streaming.api.functions.aggregation.ComparableAggregator;
 import org.apache.flink.streaming.api.functions.aggregation.SumAggregator;
 import org.apache.flink.streaming.api.operators.StreamGroupedReduce;
@@ -43,7 +43,7 @@ import org.apache.flink.streaming.util.keys.KeySelectorUtil;
 
 import org.junit.Test;
 
-public class AggregationFunctionTest {
+public class BuiltinAggregatorTest {
 
 	@Test
 	public void groupSumIntegerTest() throws Exception {

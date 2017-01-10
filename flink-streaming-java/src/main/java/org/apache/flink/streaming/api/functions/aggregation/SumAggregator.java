@@ -27,7 +27,7 @@ import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.streaming.util.typeutils.FieldAccessor;
 
 @Internal
-public class SumAggregator<T> extends AggregationFunction<T> {
+public class SumAggregator<T> extends BuiltinAggregator<T> {
 
 	private static final long serialVersionUID = 1L;
 
