@@ -76,79 +76,79 @@ abstract class AvgAggregateTestBase[T: Numeric] extends AggregateTestBase[T] {
     null.asInstanceOf[T]
   )
 }
-
-class ByteAvgAggregateTest extends AvgAggregateTestBase[Byte] {
-
-  override def minVal = (Byte.MinValue + 1).toByte
-  override def maxVal = (Byte.MaxValue - 1).toByte
-
-  override def aggregator = new ByteAvgAggregate()
-}
-
-class ShortAvgAggregateTest extends AvgAggregateTestBase[Short] {
-
-  override def minVal = (Short.MinValue + 1).toShort
-  override def maxVal = (Short.MaxValue - 1).toShort
-
-  override def aggregator = new ShortAvgAggregate()
-}
-
-class IntAvgAggregateTest extends AvgAggregateTestBase[Int] {
-
-  override def minVal = Int.MinValue + 1
-  override def maxVal = Int.MaxValue - 1
-
-  override def aggregator = new IntAvgAggregate()
-}
-
-class LongAvgAggregateTest extends AvgAggregateTestBase[Long] {
-
-  override def minVal = Long.MinValue + 1
-  override def maxVal = Long.MaxValue - 1
-
-  override def aggregator = new LongAvgAggregate()
-}
-
-class FloatAvgAggregateTest extends AvgAggregateTestBase[Float] {
-
-  override def minVal = Float.MinValue
-  override def maxVal = Float.MaxValue
-
-  override def aggregator = new FloatAvgAggregate()
-}
-
-class DoubleAvgAggregateTest extends AvgAggregateTestBase[Double] {
-
-  override def minVal = Float.MinValue
-  override def maxVal = Float.MaxValue
-
-  override def aggregator = new DoubleAvgAggregate()
-}
-
-class DecimalAvgAggregateTest extends AggregateTestBase[BigDecimal] {
-
-  override def inputValueSets: Seq[Seq[_]] = Seq(
-    Seq(
-      new BigDecimal("987654321000000"),
-      new BigDecimal("-0.000000000012345"),
-      null,
-      new BigDecimal("0.000000000012345"),
-      new BigDecimal("-987654321000000"),
-      null,
-      new BigDecimal("0")
-    ),
-    Seq(
-      null,
-      null,
-      null,
-      null
-    )
-  )
-
-  override def expectedResults: Seq[BigDecimal] = Seq(
-    BigDecimal.ZERO,
-    null
-  )
-
-  override def aggregator: Aggregate[BigDecimal] = new DecimalAvgAggregate()
-}
+//
+//class ByteAvgAggregateTest extends AvgAggregateTestBase[Byte] {
+//
+//  override def minVal = (Byte.MinValue + 1).toByte
+//  override def maxVal = (Byte.MaxValue - 1).toByte
+//
+//  override def aggregator = new ByteAvgAggregate()
+//}
+//
+//class ShortAvgAggregateTest extends AvgAggregateTestBase[Short] {
+//
+//  override def minVal = (Short.MinValue + 1).toShort
+//  override def maxVal = (Short.MaxValue - 1).toShort
+//
+//  override def aggregator = new ShortAvgAggregate()
+//}
+//
+//class IntAvgAggregateTest extends AvgAggregateTestBase[Int] {
+//
+//  override def minVal = Int.MinValue + 1
+//  override def maxVal = Int.MaxValue - 1
+//
+//  override def aggregator = new IntAvgAggregate()
+//}
+//
+//class LongAvgAggregateTest extends AvgAggregateTestBase[Long] {
+//
+//  override def minVal = Long.MinValue + 1
+//  override def maxVal = Long.MaxValue - 1
+//
+//  override def aggregator = new LongAvgAggregate()
+//}
+//
+//class FloatAvgAggregateTest extends AvgAggregateTestBase[Float] {
+//
+//  override def minVal = Float.MinValue
+//  override def maxVal = Float.MaxValue
+//
+//  override def aggregator = new FloatAvgAggregate()
+//}
+//
+//class DoubleAvgAggregateTest extends AvgAggregateTestBase[Double] {
+//
+//  override def minVal = Float.MinValue
+//  override def maxVal = Float.MaxValue
+//
+//  override def aggregator = new DoubleAvgAggregate()
+//}
+//
+//class DecimalAvgAggregateTest extends AggregateTestBase[BigDecimal] {
+//
+//  override def inputValueSets: Seq[Seq[_]] = Seq(
+//    Seq(
+//      new BigDecimal("987654321000000"),
+//      new BigDecimal("-0.000000000012345"),
+//      null,
+//      new BigDecimal("0.000000000012345"),
+//      new BigDecimal("-987654321000000"),
+//      null,
+//      new BigDecimal("0")
+//    ),
+//    Seq(
+//      null,
+//      null,
+//      null,
+//      null
+//    )
+//  )
+//
+//  override def expectedResults: Seq[BigDecimal] = Seq(
+//    BigDecimal.ZERO,
+//    null
+//  )
+//
+//  override def aggregator: Aggregate[BigDecimal] = new DecimalAvgAggregate()
+//}
