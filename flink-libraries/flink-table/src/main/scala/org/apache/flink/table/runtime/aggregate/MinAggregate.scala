@@ -85,87 +85,87 @@ abstract class MinAggregate[T](implicit ord: Ordering[T]) extends Aggregate[T] {
     minIndex = aggOffset
   }
 }
-
-class ByteMinAggregate extends MinAggregate[Byte] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.BYTE_TYPE_INFO)
-
-}
-
-class ShortMinAggregate extends MinAggregate[Short] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.SHORT_TYPE_INFO)
-
-}
-
-class IntMinAggregate extends MinAggregate[Int] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.INT_TYPE_INFO)
-
-}
-
-class LongMinAggregate extends MinAggregate[Long] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.LONG_TYPE_INFO)
-
-}
-
-class FloatMinAggregate extends MinAggregate[Float] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.FLOAT_TYPE_INFO)
-
-}
-
-class DoubleMinAggregate extends MinAggregate[Double] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.DOUBLE_TYPE_INFO)
-
-}
-
-class BooleanMinAggregate extends MinAggregate[Boolean] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.BOOLEAN_TYPE_INFO)
-
-}
-
-class DecimalMinAggregate extends Aggregate[BigDecimal] {
-
-  protected var minIndex: Int = _
-
-  override def intermediateDataType = Array(BasicTypeInfo.BIG_DEC_TYPE_INFO)
-
-  override def initiate(intermediate: Row): Unit = {
-    intermediate.setField(minIndex, null)
-  }
-
-  override def prepare(value: Any, partial: Row): Unit = {
-    if (value == null) {
-      initiate(partial)
-    } else {
-      partial.setField(minIndex, value)
-    }
-  }
-
-  override def merge(partial: Row, buffer: Row): Unit = {
-    val partialValue = partial.getField(minIndex).asInstanceOf[BigDecimal]
-    if (partialValue != null) {
-      val bufferValue = buffer.getField(minIndex).asInstanceOf[BigDecimal]
-      if (bufferValue != null) {
-        val min = if (partialValue.compareTo(bufferValue) < 0) partialValue else bufferValue
-        buffer.setField(minIndex, min)
-      } else {
-        buffer.setField(minIndex, partialValue)
-      }
-    }
-  }
-
-  override def evaluate(buffer: Row): BigDecimal = {
-    buffer.getField(minIndex).asInstanceOf[BigDecimal]
-  }
-
-  override def supportPartial: Boolean = true
-
-  override def setAggOffsetInRow(aggOffset: Int): Unit = {
-    minIndex = aggOffset
-  }
-}
+//
+//class ByteMinAggregate extends MinAggregate[Byte] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.BYTE_TYPE_INFO)
+//
+//}
+//
+//class ShortMinAggregate extends MinAggregate[Short] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.SHORT_TYPE_INFO)
+//
+//}
+//
+//class IntMinAggregate extends MinAggregate[Int] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.INT_TYPE_INFO)
+//
+//}
+//
+//class LongMinAggregate extends MinAggregate[Long] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.LONG_TYPE_INFO)
+//
+//}
+//
+//class FloatMinAggregate extends MinAggregate[Float] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.FLOAT_TYPE_INFO)
+//
+//}
+//
+//class DoubleMinAggregate extends MinAggregate[Double] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.DOUBLE_TYPE_INFO)
+//
+//}
+//
+//class BooleanMinAggregate extends MinAggregate[Boolean] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.BOOLEAN_TYPE_INFO)
+//
+//}
+//
+//class DecimalMinAggregate extends Aggregate[BigDecimal] {
+//
+//  protected var minIndex: Int = _
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.BIG_DEC_TYPE_INFO)
+//
+//  override def initiate(intermediate: Row): Unit = {
+//    intermediate.setField(minIndex, null)
+//  }
+//
+//  override def prepare(value: Any, partial: Row): Unit = {
+//    if (value == null) {
+//      initiate(partial)
+//    } else {
+//      partial.setField(minIndex, value)
+//    }
+//  }
+//
+//  override def merge(partial: Row, buffer: Row): Unit = {
+//    val partialValue = partial.getField(minIndex).asInstanceOf[BigDecimal]
+//    if (partialValue != null) {
+//      val bufferValue = buffer.getField(minIndex).asInstanceOf[BigDecimal]
+//      if (bufferValue != null) {
+//        val min = if (partialValue.compareTo(bufferValue) < 0) partialValue else bufferValue
+//        buffer.setField(minIndex, min)
+//      } else {
+//        buffer.setField(minIndex, partialValue)
+//      }
+//    }
+//  }
+//
+//  override def evaluate(buffer: Row): BigDecimal = {
+//    buffer.getField(minIndex).asInstanceOf[BigDecimal]
+//  }
+//
+//  override def supportPartial: Boolean = true
+//
+//  override def setAggOffsetInRow(aggOffset: Int): Unit = {
+//    minIndex = aggOffset
+//  }
+//}

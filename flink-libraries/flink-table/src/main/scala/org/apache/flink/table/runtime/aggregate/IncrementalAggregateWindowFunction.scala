@@ -70,11 +70,23 @@ class IncrementalAggregateWindowFunction[W <: Window](
         case (after, previous) =>
           output.setField(after, record.getField(previous))
       }
+
+      val aggregates: Seq[Aggregate[_]] = aggregateMapping.indices.map { index =>
+        record.getField(index + groupKeysMapping.length).asInstanceOf[Aggregate[_]]
+      }
+
       // Evaluate final aggregate value and set to output.
       aggregateMapping.foreach {
         case (after, previous) =>
-          output.setField(after, aggregates(previous).evaluate(record))
+          output.setField(after, aggregates(previous).finish())
       }
+//      // Evaluate final aggregate value and set to output.
+//      aggregateMapping.foreach {
+//        case (after, previous) =>
+//          output.setField(after, aggregates(previous).finish())
+//      }
+      //aggregates.foreach(_.init())
+
       out.collect(output)
     }
   }

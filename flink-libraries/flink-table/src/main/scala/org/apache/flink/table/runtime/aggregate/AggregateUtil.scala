@@ -27,8 +27,10 @@ import org.apache.calcite.sql.`type`.SqlTypeName
 import org.apache.calcite.sql.fun._
 import org.apache.flink.api.common.functions.{MapFunction, RichGroupReduceFunction,RichGroupCombineFunction}
 import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
+import org.apache.flink.api.common.functions.{FoldFunction, MapFunction, RichGroupReduceFunction}
+import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.tuple.Tuple
-import org.apache.flink.api.java.typeutils.RowTypeInfo
+import org.apache.flink.api.java.typeutils.{RowTypeInfo, TypeExtractor}
 import org.apache.flink.table.calcite.{FlinkRelBuilder, FlinkTypeFactory}
 import FlinkRelBuilder.NamedWindowProperty
 import org.apache.flink.table.expressions._
@@ -42,6 +44,7 @@ import org.apache.flink.types.Row
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
+import org.apache.flink.api.common.functions.AggregateFunction
 
 object AggregateUtil {
 
@@ -342,9 +345,14 @@ object AggregateUtil {
     val intermediateRowArity = groupings.length +
       aggregates.map(_.intermediateDataType.length).sum
 
+    val (aggFieldIndexes, newaggregates) =
+      transformToAggregateFunctions(namedAggregates.map(_.getKey),
+                                    inputType, groupings.length)
+
     val groupReduceFunction =
       if (allPartialAggregate) {
         new AggregateReduceCombineFunction(
+          aggFieldIndexes,
           aggregates,
           groupingOffsetMapping,
           aggOffsetMapping,
@@ -354,6 +362,7 @@ object AggregateUtil {
       }
       else {
         new AggregateReduceGroupFunction(
+          aggFieldIndexes,
           aggregates,
           groupingOffsetMapping,
           aggOffsetMapping,
@@ -392,6 +401,161 @@ object AggregateUtil {
       intermediateRowArity)
     reduceFunction
   }
+
+
+  private def createAggregatePartialDataType(
+      inputType: RelDataType, groupings: Array[Int], aggregates: Array[Aggregate[_]]):
+  RowTypeInfo = {
+
+    // get the field data types of group keys.
+    val groupingTypes: Seq[TypeInformation[_]] = groupings
+                                                 .map(inputType.getFieldList.get(_).getType)
+                                                 .map(FlinkTypeFactory.toTypeInfo)
+
+    val aggTypes: Seq[TypeInformation[_]] = aggregates.map { agg =>
+      val clazz: Class[_] = agg.getClass
+      TypeInformation.of(clazz)
+    }
+
+    val allFieldTypes = groupingTypes ++ aggTypes
+
+    val partialType = new RowTypeInfo(allFieldTypes: _*)
+    partialType
+  }
+
+
+  private def createFoldInitialValue(
+      groupings: Array[Int],
+      aggregates: Array[Aggregate[_]]): Row = {
+
+    val row: Row = new Row(groupings.length + aggregates.length)
+    aggregates.zipWithIndex.foreach{ case (agg, index) =>
+      row.setField(groupings.length + index, agg)
+      agg.init()
+    }
+    row
+  }
+
+
+  private def createAggregateResultDataType(
+      outputType: RelDataType): RowTypeInfo = {
+
+    val allFieldTypes = outputType.getFieldList
+                        .map(f => FlinkTypeFactory.toTypeInfo(f.getType))
+
+    val partialType = new RowTypeInfo(allFieldTypes: _*)
+    partialType
+  }
+
+  /**
+    * Create Flink operator functions for stream aggregates.
+    * It includes 2 implementations of Flink operator functions:
+    * [[org.apache.flink.api.common.functions.FoldFunction]] and
+    * [[org.apache.flink.api.common.functions.MapFunction]]
+    *
+    * {{{
+    *  The FoldFunction initial value and output value format is:
+    *        +---------+---------+--------+--------+--------+--------+
+    *        |groupKey1|groupKey2| avg(x) |count(y)| max(x) | min(y) |
+    *        +---------+---------+--------+--------+--------+--------+
+    *
+    * The MapFunction receive the above Row event, evaluate aggregates values,
+    * and emit the following Row value:
+    *
+    *        +---------+---------+--------+--------+--------+--------+
+    *        |groupKey1|groupKey2| value1 | value2 | value3 | value4 |
+    *        +---------+---------+--------+--------+--------+--------+
+    *
+    * }}}
+    */
+  def createOperatorFunctionsForStreamAggregates(
+      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+      inputType: RelDataType, outputType: RelDataType,
+      groupings: Array[Int]): (Row, FoldFunction[Row, Row], MapFunction[Row, Row]) = {
+
+    val (aggFieldIndexes, aggregates) =
+      transformToAggregateFunctions(namedAggregates.map(_.getKey), inputType, groupings.length)
+
+    // the mapping relation between field index of grouping keys and output Row.
+    val groupingOffsetMapping = getGroupKeysMapping(inputType, outputType, groupings)
+
+    // the mapping relation between aggregate function index in list and its corresponding
+    // field index in output Row.
+    val aggOffsetMapping = getAggregateMapping(namedAggregates, outputType)
+
+    if (groupingOffsetMapping.length != groupings.length ||
+      aggOffsetMapping.length != namedAggregates.length) {
+      throw new TableException("Could not find output field in input data type " +
+                                 "or aggregate functions.")
+    }
+
+    val foldPartialReturnType = createAggregatePartialDataType(inputType, groupings, aggregates)
+    val foldFunction = new AggFoldFunction(aggFieldIndexes, groupings,
+                                           aggOffsetMapping, foldPartialReturnType)
+    val foldInitialValue = createFoldInitialValue(groupings, aggregates)
+
+    val mapResultReturnType = createAggregateResultDataType(outputType)
+    val mapFunction =
+      new AggMapFunction(groupingOffsetMapping, aggOffsetMapping, mapResultReturnType)
+
+    (foldInitialValue, foldFunction, mapFunction)
+  }
+
+  /* public class Average implements AggregateFunction<Integer, AverageAccumulator, Double> {
+    *
+    *     public AverageAccumulator createAccumulator() {
+      *         return new AverageAccumulator();
+      *     }
+    *
+    *     public AverageAccumulator merge(AverageAccumulator a, AverageAccumulator b) {
+      *         a.count += b.count;
+      *         a.sum += b.sum;
+      *         return a;
+      *     }
+    *
+    *     public void add(Integer value, AverageAccumulator acc) {
+      *         acc.sum += value;
+      *         acc.count++;
+      *     }
+    *
+    *     public Double getResult(AverageAccumulator acc) {
+      *         return acc.sum / (double) acc.count;
+      *     }
+    * }
+  */
+
+
+  def createAggregateFunction(
+      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+      inputType: RelDataType, outputType: RelDataType,
+      groupings: Array[Int]): (AggregateFunction[Row, Row, Row]) = {
+
+    val (aggFieldIndexes, aggregates) =
+      transformToAggregateFunctions(namedAggregates.map(_.getKey), inputType, groupings.length)
+
+    // the mapping relation between field index of grouping keys and output Row.
+    val groupingOffsetMapping = getGroupKeysMapping(inputType, outputType, groupings)
+
+    // the mapping relation between aggregate function index in list and its corresponding
+    // field index in output Row.
+    val aggOffsetMapping = getAggregateMapping(namedAggregates, outputType)
+
+    if (groupingOffsetMapping.length != groupings.length ||
+      aggOffsetMapping.length != namedAggregates.length) {
+      throw new TableException("Could not find output field in input data type " +
+                                 "or aggregate functions.")
+    }
+    val finalRowArity = outputType.getFieldCount
+
+    val foldPartialReturnType = createAggregatePartialDataType(inputType, groupings, aggregates)
+    val foldFunction = new AggAggregateFunction(aggFieldIndexes, groupings,
+                                           aggOffsetMapping, groupings, aggregates,
+                                                finalRowArity, groupingOffsetMapping,
+                                                foldPartialReturnType)
+
+    foldFunction
+  }
+
 
   /**
     * Create an [[AllWindowFunction]] to compute non-partitioned group window aggregates.
@@ -535,6 +699,37 @@ object AggregateUtil {
         aggOffsetMapping,
         finalRowArity)
     }
+  }
+
+
+  /**
+    * Create a [[WindowFunction]] to finalize incrementally pre-computed window aggregates.
+    */
+  private[flink] def newIncrementalAggregationFunction(
+      window: LogicalWindow,
+      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+      inputType: RelDataType,
+      outputType: RelDataType,
+      groupings: Array[Int],
+      properties: Seq[NamedWindowProperty]): WindowFunction[Row, Row, Tuple, DataStreamWindow] = {
+
+    val aggregates = transformToAggregateFunctions(
+      namedAggregates.map(_.getKey),inputType,groupings.length)._2
+
+    val (groupingOffsetMapping, aggOffsetMapping) =
+      getGroupingOffsetAndAggOffsetMapping(
+        namedAggregates,
+        inputType,
+        outputType,
+        groupings)
+
+    val finalRowArity = outputType.getFieldCount
+
+    new newAggregateWindowFunction(
+      aggregates,
+      groupingOffsetMapping,
+      aggOffsetMapping,
+      finalRowArity)
   }
 
   /**
@@ -687,40 +882,40 @@ object AggregateUtil {
       aggregateCall.getAggregation match {
         case _: SqlSumAggFunction | _: SqlSumEmptyIsZeroAggFunction => {
           aggregates(index) = sqlTypeName match {
-            case TINYINT =>
-              new ByteSumAggregate
-            case SMALLINT =>
-              new ShortSumAggregate
-            case INTEGER =>
-              new IntSumAggregate
-            case BIGINT =>
-              new LongSumAggregate
-            case FLOAT =>
-              new FloatSumAggregate
-            case DOUBLE =>
-              new DoubleSumAggregate
-            case DECIMAL =>
-              new DecimalSumAggregate
+//            case TINYINT =>
+//              new ByteSumAggregate
+//            case SMALLINT =>
+//              new ShortSumAggregate
+//            case INTEGER =>
+//              new IntSumAggregate
+//            case BIGINT =>
+//              new LongSumAggregate
+//            case FLOAT =>
+//              new FloatSumAggregate
+//            case DOUBLE =>
+//              new DoubleSumAggregate
+//            case DECIMAL =>
+//              new DecimalSumAggregate
             case sqlType: SqlTypeName =>
               throw new TableException("Sum aggregate does no support type:" + sqlType)
           }
         }
         case _: SqlAvgAggFunction => {
           aggregates(index) = sqlTypeName match {
-            case TINYINT =>
-               new ByteAvgAggregate
-            case SMALLINT =>
-              new ShortAvgAggregate
-            case INTEGER =>
-              new IntAvgAggregate
-            case BIGINT =>
-              new LongAvgAggregate
-            case FLOAT =>
-              new FloatAvgAggregate
-            case DOUBLE =>
-              new DoubleAvgAggregate
-            case DECIMAL =>
-              new DecimalAvgAggregate
+//            case TINYINT =>
+//               new ByteAvgAggregate
+//            case SMALLINT =>
+//              new ShortAvgAggregate
+//            case INTEGER =>
+//              new IntAvgAggregate
+//            case BIGINT =>
+//              new LongAvgAggregate
+//            case FLOAT =>
+//              new FloatAvgAggregate
+//            case DOUBLE =>
+//              new DoubleAvgAggregate
+//            case DECIMAL =>
+//              new DecimalAvgAggregate
             case sqlType: SqlTypeName =>
               throw new TableException("Avg aggregate does no support type:" + sqlType)
           }
@@ -728,43 +923,43 @@ object AggregateUtil {
         case sqlMinMaxFunction: SqlMinMaxAggFunction => {
           aggregates(index) = if (sqlMinMaxFunction.getKind == SqlKind.MIN) {
             sqlTypeName match {
-              case TINYINT =>
-                new ByteMinAggregate
-              case SMALLINT =>
-                new ShortMinAggregate
-              case INTEGER =>
-                new IntMinAggregate
-              case BIGINT =>
-                new LongMinAggregate
-              case FLOAT =>
-                new FloatMinAggregate
-              case DOUBLE =>
-                new DoubleMinAggregate
-              case DECIMAL =>
-                new DecimalMinAggregate
-              case BOOLEAN =>
-                new BooleanMinAggregate
+//              case TINYINT =>
+//                new ByteMinAggregate
+//              case SMALLINT =>
+//                new ShortMinAggregate
+//              case INTEGER =>
+//                new IntMinAggregate
+//              case BIGINT =>
+//                new LongMinAggregate
+//              case FLOAT =>
+//                new FloatMinAggregate
+//              case DOUBLE =>
+//                new DoubleMinAggregate
+//              case DECIMAL =>
+//                new DecimalMinAggregate
+//              case BOOLEAN =>
+//                new BooleanMinAggregate
               case sqlType: SqlTypeName =>
                 throw new TableException("Min aggregate does no support type:" + sqlType)
             }
           } else {
             sqlTypeName match {
-              case TINYINT =>
-                new ByteMaxAggregate
-              case SMALLINT =>
-                new ShortMaxAggregate
+//              case TINYINT =>
+//                new ByteMaxAggregate
+//              case SMALLINT =>
+//                new ShortMaxAggregate
               case INTEGER =>
                 new IntMaxAggregate
-              case BIGINT =>
-                new LongMaxAggregate
-              case FLOAT =>
-                new FloatMaxAggregate
-              case DOUBLE =>
-                new DoubleMaxAggregate
-              case DECIMAL =>
-                new DecimalMaxAggregate
-              case BOOLEAN =>
-                new BooleanMaxAggregate
+//              case BIGINT =>
+//                new LongMaxAggregate
+//              case FLOAT =>
+//                new FloatMaxAggregate
+//              case DOUBLE =>
+//                new DoubleMaxAggregate
+//              case DECIMAL =>
+//                new DecimalMaxAggregate
+//              case BOOLEAN =>
+//                new BooleanMaxAggregate
               case sqlType: SqlTypeName =>
                 throw new TableException("Max aggregate does no support type:" + sqlType)
             }
@@ -775,7 +970,7 @@ object AggregateUtil {
         case unSupported: SqlAggFunction =>
           throw new TableException("unsupported Function: " + unSupported.getName)
       }
-      setAggregateDataOffset(index)
+//      setAggregateDataOffset(index)
     }
 
     // set the aggregate intermediate data start index in Row, and update current value.

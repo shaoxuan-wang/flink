@@ -31,6 +31,8 @@ import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase
 import org.apache.flink.table.api.TableEnvironment
 import org.junit.Assert._
 import org.junit.Test
+import org.apache.flink.table.api.scala.stream.utils.StreamTestData
+//import org.apache.flink.table.runtime.aggregate.firstUDAF
 
 import scala.collection.mutable
 
@@ -44,8 +46,90 @@ class AggregationsITCase extends StreamingMultipleProgramsTestBase {
     (1L, 1, "Hi"),
     (2L, 2, "Hello"),
     (4L, 2, "Hello"),
-    (8L, 3, "Hello world"),
-    (16L, 3, "Hello world"))
+    (5L, 2, "Hello"),
+    (6L, 2, "Hello"),
+    (7L, 2, "Hello"),
+    (8L, 2, "Hello"),
+    (9L, 2, "Hello"),
+    (10L, 2, "Hello"),
+    (11L, 3, "Hello world"),
+    (12L, 3, "Hello world"))
+
+
+//    def getSmall3TupleDataStream(env: StreamExecutionEnvironment): DataStream[(Int, Long, String)] = {
+//      val data = new mutable.MutableList[(Int, Long, String)]
+//      data.+=((1, 1L, "Hi"))
+//      data.+=((2, 2L, "Hello"))
+//      data.+=((3, 2L, "Hello world"))
+//      env.fromCollection(data)
+//    }
+//  @Test
+//  def testGroupedUserDefinedAggregate(): Unit = {
+//    val env = StreamExecutionEnvironment.getExecutionEnvironment
+//    //env.setParallelism(1)
+//    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+//    val tEnv = TableEnvironment.getTableEnvironment(env)
+//    StreamITCase.testResults = mutable.MutableList()
+//
+//    val first = new firstUDAF
+//
+//    val t = StreamTestData.getSmall3TupleDataStream(env)
+//            .toTable(tEnv, 'a, 'b, 'c)
+//            .groupBy('b)
+//            .window(Slide over 2.rows every 1.rows)
+//            .select('b, first('c))
+//    //.select('b, 'c.count)
+//
+//    val results = t.toDataStream[Row]
+//    results.addSink(new StreamITCase.StringSink)
+//    env.execute()
+//
+//    val expected = mutable.MutableList("1,1", "2,1", "2,2")
+//
+//    assertEquals(expected.sorted, StreamITCase.testResults.sorted)
+//  }
+
+  @Test
+  def mytest(): Unit = {
+    val env = StreamExecutionEnvironment.getExecutionEnvironment
+    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+    val tEnv = TableEnvironment.getTableEnvironment(env)
+    StreamITCase.testResults = mutable.MutableList()
+    val data = List(
+      (2L, 2, "Hello"),
+      (4L, 4, "Hello"),
+      (6L, 6, "Hello"),
+      (9L, 9, "Hello"),
+//      (8L, 8, "Hello"),
+//      (13L, 13, "Hello"),
+//      (20L, 20, "Hello"),
+      (47L, 47, "Hello"),
+      (48L, 48, "Hello"),
+      (49L, 49, "Hello")
+    )
+    val stream = env.fromCollection(data).assignTimestampsAndWatermarks(new TimestampWithEqualWatermark())
+    val table = stream.toTable(tEnv, 'long, 'int, 'string)
+
+    val windowedTable =
+      table
+//      .window(Tumble over 5.milli on 'rowtime as 'w)
+      .window(Session withGap 4.milli on 'rowtime as 'w)
+      .groupBy('w, 'string)
+      .select('string, 'int.count, 'int.max)
+//      .select('string, 'int.count)
+
+    val results = windowedTable.toDataStream[Row]
+    results.addSink(new StreamITCase.StringSink)
+    env.execute()
+
+    for( data <- StreamITCase.testResults.sorted){
+      println(data)
+    }
+    val expected = Seq("Hello,53,4", "Hello,52,7", "Hello,51,13", "Hello,51,20", "Hello,51,50")
+    val result = StreamITCase.testResults.sorted
+    //val expected = Seq("Hello,53", "Hello,52", "Hello,51", "Hello,51", "Hello,51")
+    assertEquals(expected.sorted, result)
+  }
 
   @Test
   def testProcessingTimeSlidingGroupWindowOverCount(): Unit = {
@@ -179,6 +263,7 @@ class AggregationsITCase extends StreamingMultipleProgramsTestBase {
       "Hi,1,1970-01-01 00:00:00.0,1970-01-01 00:00:00.01,1970-01-01 00:00:00.0")
     assertEquals(expected.sorted, StreamITCase.testResults.sorted)
   }
+
 }
 
 object GroupWindowITCase {
@@ -188,7 +273,10 @@ object GroupWindowITCase {
         lastElement: (Long, Int, String),
         extractedTimestamp: Long)
       : Watermark = {
-      new Watermark(extractedTimestamp)
+      val a = new Watermark(extractedTimestamp)
+      println("==> " + a)
+      a
+//      new Watermark(extractedTimestamp)
     }
 
     override def extractTimestamp(

@@ -26,6 +26,33 @@ abstract class MaxAggregate[T](implicit ord: Ordering[T]) extends Aggregate[T] {
 
   protected var maxIndex = -1
 
+  protected var max: Option[T] = None
+
+  override def init(): Unit = {
+    max = None
+  }
+
+  override def accumulate(input: Any): Unit = {
+    if (input != null) {
+      val value = input.asInstanceOf[T]
+      if (max.isEmpty) {
+        max = Some(input.asInstanceOf[T])
+      } else {
+        val maxValue : T = if (ord.compare(value, max.get) > 0) value else max.get
+        max = Some(maxValue)
+      }
+    }
+  }
+
+  override def finish(): T = {
+    if (max.isEmpty) {
+      null.asInstanceOf[T]
+    } else {
+      max.get
+    }
+  }
+
+  override def supportPartial: Boolean = true
   /**
    * Initiate the intermediate aggregate value in Row.
    *
@@ -79,93 +106,118 @@ abstract class MaxAggregate[T](implicit ord: Ordering[T]) extends Aggregate[T] {
     buffer.getField(maxIndex).asInstanceOf[T]
   }
 
-  override def supportPartial: Boolean = true
 
   override def setAggOffsetInRow(aggOffset: Int): Unit = {
     maxIndex = aggOffset
   }
 }
-
-class ByteMaxAggregate extends MaxAggregate[Byte] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.BYTE_TYPE_INFO)
-
-}
-
-class ShortMaxAggregate extends MaxAggregate[Short] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.SHORT_TYPE_INFO)
-
+//
+//class ByteMaxAggregate extends MaxAggregate[Byte] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.BYTE_TYPE_INFO)
+//
+//}
+//
+//class ShortMaxAggregate extends MaxAggregate[Short] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.SHORT_TYPE_INFO)
+//
+//}
+//
+class MaxAccumulator extends Accumulator{
+  var max: Int = 0
 }
 
 class IntMaxAggregate extends MaxAggregate[Int] {
-
+  override def createAccumulator(): MaxAccumulator = {
+    new MaxAccumulator
+  }
   override def intermediateDataType = Array(BasicTypeInfo.INT_TYPE_INFO)
 
-}
-
-class LongMaxAggregate extends MaxAggregate[Long] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.LONG_TYPE_INFO)
-
-}
-
-class FloatMaxAggregate extends MaxAggregate[Float] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.FLOAT_TYPE_INFO)
-
-}
-
-class DoubleMaxAggregate extends MaxAggregate[Double] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.DOUBLE_TYPE_INFO)
-
-}
-
-class BooleanMaxAggregate extends MaxAggregate[Boolean] {
-
-  override def intermediateDataType = Array(BasicTypeInfo.BOOLEAN_TYPE_INFO)
-
-}
-
-class DecimalMaxAggregate extends Aggregate[BigDecimal] {
-
-  protected var minIndex: Int = _
-
-  override def intermediateDataType = Array(BasicTypeInfo.BIG_DEC_TYPE_INFO)
-
-  override def initiate(intermediate: Row): Unit = {
-    intermediate.setField(minIndex, null)
-  }
-
-  override def prepare(value: Any, partial: Row): Unit = {
-    if (value == null) {
-      initiate(partial)
+  override def add(accumulator: Accumulator, value: Any) = {
+    val cur = accumulator.asInstanceOf[MaxAccumulator].max
+    val input = value.asInstanceOf[Int]
+    if (cur > input) {
+      accumulator.asInstanceOf[MaxAccumulator].max = cur
     } else {
-      partial.setField(minIndex, value)
+      accumulator.asInstanceOf[MaxAccumulator].max = input
     }
   }
 
-  override def merge(partial: Row, buffer: Row): Unit = {
-    val partialValue = partial.getField(minIndex).asInstanceOf[BigDecimal]
-    if (partialValue != null) {
-      val bufferValue = buffer.getField(minIndex).asInstanceOf[BigDecimal]
-      if (bufferValue != null) {
-        val min = if (partialValue.compareTo(bufferValue) > 0) partialValue else bufferValue
-        buffer.setField(minIndex, min)
-      } else {
-        buffer.setField(minIndex, partialValue)
-      }
-    }
+  override def getResult(accumulator: Accumulator): Int = {
+    accumulator.asInstanceOf[MaxAccumulator].max
   }
 
-  override def evaluate(buffer: Row): BigDecimal = {
-    buffer.getField(minIndex).asInstanceOf[BigDecimal]
-  }
-
-  override def supportPartial: Boolean = true
-
-  override def setAggOffsetInRow(aggOffset: Int): Unit = {
-    minIndex = aggOffset
+  override def merge(a: Accumulator, b: Accumulator): Accumulator = {
+    val ret = new MaxAccumulator
+    ret.max = a.asInstanceOf[MaxAccumulator].max
+      + b.asInstanceOf[MaxAccumulator].max
+    ret
   }
 }
+//
+//class LongMaxAggregate extends MaxAggregate[Long] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.LONG_TYPE_INFO)
+//
+//}
+//
+//class FloatMaxAggregate extends MaxAggregate[Float] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.FLOAT_TYPE_INFO)
+//
+//}
+//
+//class DoubleMaxAggregate extends MaxAggregate[Double] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.DOUBLE_TYPE_INFO)
+//
+//}
+//
+//class BooleanMaxAggregate extends MaxAggregate[Boolean] {
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.BOOLEAN_TYPE_INFO)
+//
+//}
+//
+//class DecimalMaxAggregate extends Aggregate[BigDecimal] {
+//
+//  protected var minIndex: Int = _
+//
+//  override def intermediateDataType = Array(BasicTypeInfo.BIG_DEC_TYPE_INFO)
+//
+//  override def initiate(intermediate: Row): Unit = {
+//    intermediate.setField(minIndex, null)
+//  }
+//
+//  override def prepare(value: Any, partial: Row): Unit = {
+//    if (value == null) {
+//      initiate(partial)
+//    } else {
+//      partial.setField(minIndex, value)
+//    }
+//  }
+//
+//  override def merge(partial: Row, buffer: Row): Unit = {
+//    val partialValue = partial.getField(minIndex).asInstanceOf[BigDecimal]
+//    if (partialValue != null) {
+//      val bufferValue = buffer.getField(minIndex).asInstanceOf[BigDecimal]
+//      if (bufferValue != null) {
+//        val min = if (partialValue.compareTo(bufferValue) > 0) partialValue else bufferValue
+//        buffer.setField(minIndex, min)
+//      } else {
+//        buffer.setField(minIndex, partialValue)
+//      }
+//    }
+//  }
+//
+//  override def evaluate(buffer: Row): BigDecimal = {
+//    buffer.getField(minIndex).asInstanceOf[BigDecimal]
+//  }
+//
+//  override def supportPartial: Boolean = true
+//
+//  override def setAggOffsetInRow(aggOffset: Int): Unit = {
+//    minIndex = aggOffset
+//  }
+//}

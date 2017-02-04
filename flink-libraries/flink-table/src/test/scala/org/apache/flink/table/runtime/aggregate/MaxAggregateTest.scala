@@ -56,122 +56,122 @@ abstract class MaxAggregateTestBase[T: Numeric] extends AggregateTestBase[T] {
     null.asInstanceOf[T]
   )
 }
-
-class ByteMaxAggregateTest extends MaxAggregateTestBase[Byte] {
-
-  override def minVal = (Byte.MinValue + 1).toByte
-  override def maxVal = (Byte.MaxValue - 1).toByte
-
-  override def aggregator: Aggregate[Byte] = new ByteMaxAggregate()
-}
-
-class ShortMaxAggregateTest extends MaxAggregateTestBase[Short] {
-
-  override def minVal = (Short.MinValue + 1).toShort
-  override def maxVal = (Short.MaxValue - 1).toShort
-
-  override def aggregator: Aggregate[Short] = new ShortMaxAggregate()
-}
-
-class IntMaxAggregateTest extends MaxAggregateTestBase[Int] {
-
-  override def minVal = Int.MinValue + 1
-  override def maxVal = Int.MaxValue - 1
-
-  override def aggregator: Aggregate[Int] = new IntMaxAggregate()
-}
-
-class LongMaxAggregateTest extends MaxAggregateTestBase[Long] {
-
-  override def minVal = Long.MinValue + 1
-  override def maxVal = Long.MaxValue - 1
-
-  override def aggregator: Aggregate[Long] = new LongMaxAggregate()
-}
-
-class FloatMaxAggregateTest extends MaxAggregateTestBase[Float] {
-
-  override def minVal = Float.MinValue / 2
-  override def maxVal = Float.MaxValue / 2
-
-  override def aggregator: Aggregate[Float] = new FloatMaxAggregate()
-}
-
-class DoubleMaxAggregateTest extends MaxAggregateTestBase[Double] {
-
-  override def minVal = Double.MinValue / 2
-  override def maxVal = Double.MaxValue / 2
-
-  override def aggregator: Aggregate[Double] = new DoubleMaxAggregate()
-}
-
-class BooleanMaxAggregateTest extends AggregateTestBase[Boolean] {
-
-  override def inputValueSets: Seq[Seq[Boolean]] = Seq(
-    Seq(
-      false,
-      false,
-      false
-    ),
-    Seq(
-      true,
-      true,
-      true
-    ),
-    Seq(
-      true,
-      false,
-      null.asInstanceOf[Boolean],
-      true,
-      false,
-      true,
-      null.asInstanceOf[Boolean]
-    ),
-    Seq(
-      null.asInstanceOf[Boolean],
-      null.asInstanceOf[Boolean],
-      null.asInstanceOf[Boolean]
-    )
-  )
-
-  override def expectedResults: Seq[Boolean] = Seq(
-    false,
-    true,
-    true,
-    null.asInstanceOf[Boolean]
-  )
-
-  override def aggregator: Aggregate[Boolean] = new BooleanMaxAggregate()
-}
-
-class DecimalMaxAggregateTest extends AggregateTestBase[BigDecimal] {
-
-  override def inputValueSets: Seq[Seq[_]] = Seq(
-    Seq(
-      new BigDecimal("1"),
-      new BigDecimal("1000.000001"),
-      new BigDecimal("-1"),
-      new BigDecimal("-999.998999"),
-      null,
-      new BigDecimal("0"),
-      new BigDecimal("-999.999"),
-      null,
-      new BigDecimal("999.999")
-    ),
-    Seq(
-      null,
-      null,
-      null,
-      null,
-      null
-    )
-  )
-
-  override def expectedResults: Seq[BigDecimal] = Seq(
-    new BigDecimal("1000.000001"),
-    null
-  )
-
-  override def aggregator: Aggregate[BigDecimal] = new DecimalMaxAggregate()
-
-}
+//
+//class ByteMaxAggregateTest extends MaxAggregateTestBase[Byte] {
+//
+//  override def minVal = (Byte.MinValue + 1).toByte
+//  override def maxVal = (Byte.MaxValue - 1).toByte
+//
+//  override def aggregator: Aggregate[Byte] = new ByteMaxAggregate()
+//}
+//
+//class ShortMaxAggregateTest extends MaxAggregateTestBase[Short] {
+//
+//  override def minVal = (Short.MinValue + 1).toShort
+//  override def maxVal = (Short.MaxValue - 1).toShort
+//
+//  override def aggregator: Aggregate[Short] = new ShortMaxAggregate()
+//}
+//
+//class IntMaxAggregateTest extends MaxAggregateTestBase[Int] {
+//
+//  override def minVal = Int.MinValue + 1
+//  override def maxVal = Int.MaxValue - 1
+//
+//  override def aggregator: Aggregate[Int] = new IntMaxAggregate()
+//}
+//
+//class LongMaxAggregateTest extends MaxAggregateTestBase[Long] {
+//
+//  override def minVal = Long.MinValue + 1
+//  override def maxVal = Long.MaxValue - 1
+//
+//  override def aggregator: Aggregate[Long] = new LongMaxAggregate()
+//}
+//
+//class FloatMaxAggregateTest extends MaxAggregateTestBase[Float] {
+//
+//  override def minVal = Float.MinValue / 2
+//  override def maxVal = Float.MaxValue / 2
+//
+//  override def aggregator: Aggregate[Float] = new FloatMaxAggregate()
+//}
+//
+//class DoubleMaxAggregateTest extends MaxAggregateTestBase[Double] {
+//
+//  override def minVal = Double.MinValue / 2
+//  override def maxVal = Double.MaxValue / 2
+//
+//  override def aggregator: Aggregate[Double] = new DoubleMaxAggregate()
+//}
+//
+//class BooleanMaxAggregateTest extends AggregateTestBase[Boolean] {
+//
+//  override def inputValueSets: Seq[Seq[Boolean]] = Seq(
+//    Seq(
+//      false,
+//      false,
+//      false
+//    ),
+//    Seq(
+//      true,
+//      true,
+//      true
+//    ),
+//    Seq(
+//      true,
+//      false,
+//      null.asInstanceOf[Boolean],
+//      true,
+//      false,
+//      true,
+//      null.asInstanceOf[Boolean]
+//    ),
+//    Seq(
+//      null.asInstanceOf[Boolean],
+//      null.asInstanceOf[Boolean],
+//      null.asInstanceOf[Boolean]
+//    )
+//  )
+//
+//  override def expectedResults: Seq[Boolean] = Seq(
+//    false,
+//    true,
+//    true,
+//    null.asInstanceOf[Boolean]
+//  )
+//
+//  override def aggregator: Aggregate[Boolean] = new BooleanMaxAggregate()
+//}
+//
+//class DecimalMaxAggregateTest extends AggregateTestBase[BigDecimal] {
+//
+//  override def inputValueSets: Seq[Seq[_]] = Seq(
+//    Seq(
+//      new BigDecimal("1"),
+//      new BigDecimal("1000.000001"),
+//      new BigDecimal("-1"),
+//      new BigDecimal("-999.998999"),
+//      null,
+//      new BigDecimal("0"),
+//      new BigDecimal("-999.999"),
+//      null,
+//      new BigDecimal("999.999")
+//    ),
+//    Seq(
+//      null,
+//      null,
+//      null,
+//      null,
+//      null
+//    )
+//  )
+//
+//  override def expectedResults: Seq[BigDecimal] = Seq(
+//    new BigDecimal("1000.000001"),
+//    null
+//  )
+//
+//  override def aggregator: Aggregate[BigDecimal] = new DecimalMaxAggregate()
+//
+//}

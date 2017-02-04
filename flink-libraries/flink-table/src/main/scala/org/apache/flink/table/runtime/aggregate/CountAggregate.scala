@@ -20,11 +20,49 @@ package org.apache.flink.table.runtime.aggregate
 import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
 import org.apache.flink.types.Row
 
+
+class CountAccumulator extends Accumulator{
+  var count: Long = 0
+}
+
 class CountAggregate extends Aggregate[Long] {
   private var countIndex: Int = _
+  var count: Long = 0
+
+  override def add(accumulator: Accumulator, value: Any) = {
+    accumulator.asInstanceOf[CountAccumulator].count += 1
+  }
+
+  override def getResult(accumulator: Accumulator): Long = {
+    accumulator.asInstanceOf[CountAccumulator].count
+  }
+
+  override def merge(a: Accumulator, b: Accumulator): Accumulator = {
+    a.asInstanceOf[CountAccumulator].count += b.asInstanceOf[CountAccumulator].count
+    a
+  }
+
+  override def createAccumulator():Accumulator = {
+    new CountAccumulator
+  }
+
+  override def init(): Unit = {
+    count = 0
+  }
+
+  override def accumulate(input: Any): Unit = {
+    if (input != null) {
+      count += 1
+    }
+  }
+
+  override def finish(): Long = {
+    count
+  }
 
   override def initiate(intermediate: Row): Unit = {
     intermediate.setField(countIndex, 0L)
+    count = 0
   }
 
   override def merge(intermediate: Row, buffer: Row): Unit = {

@@ -34,14 +34,33 @@ import org.apache.flink.types.Row
  *
  * The intermediate aggregate value is stored inside Row, aggOffsetInRow is used as the start
  * field index in Row, so different aggregate functions could share the same Row as intermediate
- * aggregate value/aggregate buffer, as their aggregate values could be stored in distinct fields
+ * aggregate value/aggregate buffer, as their aggregate values could be stored in distinct
+  * fields
  * of Row with no conflict. The intermediate aggregate value is required to be a sequence of JVM
  * primitives, and Flink use intermediateDataType() to get its data types in SQL side.
  *
- * @tparam T Aggregated value type.
+ * //@tparam  Aggregated value type.
  */
+trait Accumulator {
+}
+
 trait Aggregate[T] extends Serializable {
 
+//  private def getAccumT(): AccumT = {
+//    TypeInformation.of(Aggregate[_])
+//  }
+
+//  class myData
+
+  def createAccumulator(): Accumulator
+
+//  def newaccumulate(input: AccumT): Any
+
+  def add(accumulator: Accumulator, value: Any)
+
+  def getResult(accumulator: Accumulator): T
+
+  def merge(a: Accumulator, b: Accumulator): Accumulator
   /**
     * Transform the aggregate field value into intermediate aggregate data.
     *
@@ -56,7 +75,7 @@ trait Aggregate[T] extends Serializable {
     * @param intermediate The intermediate aggregate row to initiate.
     */
   def initiate(intermediate: Row): Unit
-
+  def init(): Unit
   /**
     * Merge intermediate aggregate data into aggregate buffer.
     *
@@ -93,4 +112,8 @@ trait Aggregate[T] extends Serializable {
     * @return True if the aggregate supports partial aggregation, False otherwise.
     */
   def supportPartial: Boolean = false
+
+  def accumulate(input: Any)
+
+  def finish(): T
 }

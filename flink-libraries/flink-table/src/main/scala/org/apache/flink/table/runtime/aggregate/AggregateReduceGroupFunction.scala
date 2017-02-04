@@ -39,6 +39,7 @@ import scala.collection.JavaConversions._
  *                            Row and output Row.
  */
 class AggregateReduceGroupFunction(
+    private val aggFields: Array[Int],
     private val aggregates: Array[Aggregate[_ <: Any]],
     private val groupKeysMapping: Array[(Int, Int)],
     private val aggregateMapping: Array[(Int, Int)],
@@ -73,16 +74,33 @@ class AggregateReduceGroupFunction(
   override def reduce(records: Iterable[Row], out: Collector[Row]): Unit = {
 
     // Initiate intermediate aggregate value.
-    aggregates.foreach(_.initiate(aggregateBuffer))
+//    aggregates.foreach(_.initiate(aggregateBuffer))
 
     // Merge intermediate aggregate value to buffer.
     var last: Row = null
+//    records.foreach((record) => {
+//      aggregates.foreach(_.merge(record, aggregateBuffer))
+//      last = record
+//    })
+    aggregates.zipWithIndex.foreach { case (udaf, index) =>
+      udaf.init()
+    }
+
     records.foreach((record) => {
-      aggregates.foreach(_.merge(record, aggregateBuffer))
-      last = record
+      aggregates.zipWithIndex.foreach { case (udaf, index) =>
+        val v = record.getField(aggFields(index))
+        udaf.accumulate(v)
+        last = record
+//        accumulator.setField(groupKeys.length + index, udaf)
+      }
     })
 
     // Set group keys value to final output.
+//    groupKeysMapping.foreach {
+//      case (after, previous) =>
+//        output.setField(after, last.getField(previous))
+//    }
+
     groupKeysMapping.foreach {
       case (after, previous) =>
         output.setField(after, last.getField(previous))
@@ -91,7 +109,11 @@ class AggregateReduceGroupFunction(
     // Evaluate final aggregate value and set to output.
     aggregateMapping.foreach {
       case (after, previous) =>
-        output.setField(after, aggregates(previous).evaluate(aggregateBuffer))
+        output.setField(after, aggregates(previous).finish())
+    }
+
+    aggregates.zipWithIndex.foreach { case (udaf, index) =>
+      udaf.init()
     }
 
     // Evaluate additional values of grouping sets
