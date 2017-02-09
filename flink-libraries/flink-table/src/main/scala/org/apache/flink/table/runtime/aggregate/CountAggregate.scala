@@ -46,20 +46,6 @@ class CountAggregate extends Aggregate[Long] {
     new CountAccumulator
   }
 
-  override def init(): Unit = {
-    count = 0
-  }
-
-  override def accumulate(input: Any): Unit = {
-    if (input != null) {
-      count += 1
-    }
-  }
-
-  override def finish(): Long = {
-    count
-  }
-
   override def initiate(intermediate: Row): Unit = {
     intermediate.setField(countIndex, 0L)
     count = 0

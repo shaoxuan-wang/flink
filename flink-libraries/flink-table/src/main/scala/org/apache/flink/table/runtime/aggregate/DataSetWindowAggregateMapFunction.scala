@@ -51,18 +51,25 @@ class DataSetWindowAggregateMapFunction(
     Preconditions.checkNotNull(aggFields)
     Preconditions.checkArgument(aggregates.length == aggFields.length)
     // add one more arity to store rowtime
-    val partialRowLength = groupingKeys.length +
-      aggregates.map(_.intermediateDataType.length).sum + 1
+//    val partialRowLength = groupingKeys.length +
+//      aggregates.map(_.intermediateDataType.length).sum + 1
+    val partialRowLength = groupingKeys.length + aggregates.length + 1
     // set rowtime to the last field of the output row
     rowtimeIndex = partialRowLength - 1
     output = new Row(partialRowLength)
   }
 
   override def map(input: Row): Row = {
+    //initialize the first row
     for (i <- aggregates.indices) {
+      val agg = aggregates(i)
       val fieldValue = input.getField(aggFields(i))
-      aggregates(i).prepare(fieldValue, output)
+      val accumulator = agg.createAccumulator()
+      agg.add(accumulator, fieldValue)
+      output.setField(groupingKeys.length + i, accumulator)
     }
+
+    //set groupingKeys
     for (i <- groupingKeys.indices) {
       output.setField(i, input.getField(groupingKeys(i)))
     }

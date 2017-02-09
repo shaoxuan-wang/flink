@@ -43,7 +43,6 @@ import org.apache.flink.util.{Collector, Preconditions}
   *                         and output Row.
   * @param aggregateMapping The index mapping between aggregate function list and aggregated value
   *                         index in output Row.
-  * @param intermediateRowArity The intermediate row field count.
   * @param finalRowArity The output row field count.
   * @param finalRowWindowStartPos The relative window-start field position.
   * @param finalRowWindowEndPos The relative window-end field position.
@@ -53,7 +52,6 @@ class DataSetSessionWindowAggregateReduceGroupFunction(
     aggregates: Array[Aggregate[_ <: Any]],
     groupKeysMapping: Array[(Int, Int)],
     aggregateMapping: Array[(Int, Int)],
-    intermediateRowArity: Int,
     finalRowArity: Int,
     finalRowWindowStartPos: Option[Int],
     finalRowWindowEndPos: Option[Int],
@@ -66,6 +64,8 @@ class DataSetSessionWindowAggregateReduceGroupFunction(
   private var intermediateRowWindowEndPos = 0
   private var output: Row = _
   private var collector: TimeWindowPropertyCollector = _
+  private var accumStartPos: Int = groupKeysMapping.length
+  private var intermediateRowArity: Int = accumStartPos + aggregates.length + 2
 
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
@@ -113,12 +113,21 @@ class DataSetSessionWindowAggregateReduceGroupFunction(
           }
         }
         // initiate intermediate aggregate value.
-        aggregates.foreach(_.initiate(aggregateBuffer))
+        for (i <- aggregates.indices) {
+          val agg = aggregates(i)
+          val accumulator = agg.createAccumulator()
+          aggregateBuffer.setField(accumStartPos + i, accumulator)
+        }
         windowStart = record.getField(intermediateRowWindowStartPos).asInstanceOf[Long]
       }
 
       // merge intermediate aggregate value to the buffered value.
-      aggregates.foreach(_.merge(record, aggregateBuffer))
+      for (i <- aggregates.indices) {
+        val agg = aggregates(i)
+        val aAccum = record.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        val bAccum = aggregateBuffer.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        aggregateBuffer.setField(accumStartPos + i, agg.merge(aAccum, bAccum))
+      }
 
       windowEnd = if (isInputCombined) {
         // partial aggregate is supported
@@ -147,7 +156,11 @@ class DataSetSessionWindowAggregateReduceGroupFunction(
     // evaluate final aggregate value and set to output.
     aggregateMapping.foreach {
       case (after, previous) =>
-        output.setField(after, aggregates(previous).evaluate(aggregateBuffer))
+        {
+          val accumulator =
+            aggregateBuffer.getField(accumStartPos + previous).asInstanceOf[Accumulator]
+          output.setField(after, aggregates(previous).getResult(accumulator))
+        }
     }
 
     // adds TimeWindow properties to output then emit output

@@ -46,21 +46,14 @@ trait Accumulator {
 
 trait Aggregate[T] extends Serializable {
 
-//  private def getAccumT(): AccumT = {
-//    TypeInformation.of(Aggregate[_])
-//  }
-
-//  class myData
-
   def createAccumulator(): Accumulator
-
-//  def newaccumulate(input: AccumT): Any
 
   def add(accumulator: Accumulator, value: Any)
 
   def getResult(accumulator: Accumulator): T
 
   def merge(a: Accumulator, b: Accumulator): Accumulator
+
   /**
     * Transform the aggregate field value into intermediate aggregate data.
     *
@@ -75,7 +68,7 @@ trait Aggregate[T] extends Serializable {
     * @param intermediate The intermediate aggregate row to initiate.
     */
   def initiate(intermediate: Row): Unit
-  def init(): Unit
+
   /**
     * Merge intermediate aggregate data into aggregate buffer.
     *
@@ -113,7 +106,4 @@ trait Aggregate[T] extends Serializable {
     */
   def supportPartial: Boolean = false
 
-  def accumulate(input: Any)
-
-  def finish(): T
 }

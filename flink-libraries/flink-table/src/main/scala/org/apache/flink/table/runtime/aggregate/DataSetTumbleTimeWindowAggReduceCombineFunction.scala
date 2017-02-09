@@ -28,7 +28,6 @@ import org.apache.flink.types.Row
   * [[org.apache.flink.api.java.operators.GroupCombineOperator]].
   * It is used for tumbling time-window on batch.
   *
-  * @param rowtimePos The rowtime field index in input row
   * @param windowSize Tumbling time window size
   * @param windowStartPos The relative window-start field position to the last field of output row
   * @param windowEndPos The relative window-end field position to the last field of output row
@@ -37,28 +36,23 @@ import org.apache.flink.types.Row
   *                         and output Row.
   * @param aggregateMapping The index mapping between aggregate function list and aggregated value
   *                         index in output Row.
-  * @param intermediateRowArity The intermediate row field count
   * @param finalRowArity The output row field count
   */
 class DataSetTumbleTimeWindowAggReduceCombineFunction(
-    rowtimePos: Int,
     windowSize: Long,
     windowStartPos: Option[Int],
     windowEndPos: Option[Int],
     aggregates: Array[Aggregate[_ <: Any]],
     groupKeysMapping: Array[(Int, Int)],
     aggregateMapping: Array[(Int, Int)],
-    intermediateRowArity: Int,
     finalRowArity: Int)
   extends DataSetTumbleTimeWindowAggReduceGroupFunction(
-    rowtimePos,
     windowSize,
     windowStartPos,
     windowEndPos,
     aggregates,
     groupKeysMapping,
     aggregateMapping,
-    intermediateRowArity,
     finalRowArity)
   with CombineFunction[Row, Row] {
 
@@ -72,7 +66,11 @@ class DataSetTumbleTimeWindowAggReduceCombineFunction(
   override def combine(records: Iterable[Row]): Row = {
 
     // initiate intermediate aggregate value.
-    aggregates.foreach(_.initiate(aggregateBuffer))
+    for (i <- aggregates.indices) {
+      val agg = aggregates(i)
+      val accumulator = agg.createAccumulator()
+      aggregateBuffer.setField(groupKeysMapping.length + i, accumulator)
+    }
 
     // merge intermediate aggregate value to buffer.
     var last: Row = null
@@ -80,7 +78,13 @@ class DataSetTumbleTimeWindowAggReduceCombineFunction(
     val iterator = records.iterator()
     while (iterator.hasNext) {
       val record = iterator.next()
-      aggregates.foreach(_.merge(record, aggregateBuffer))
+      for (i <- aggregates.indices) {
+        val agg = aggregates(i)
+        val aAccum = record.getField(groupKeysMapping.length + i).asInstanceOf[Accumulator]
+        val bAccum = aggregateBuffer.getField(groupKeysMapping.length + i).asInstanceOf[Accumulator]
+        val aggRet = agg.merge(aAccum, bAccum)
+        aggregateBuffer.setField(groupKeysMapping.length + i, aggRet)
+      }
       last = record
     }
 
@@ -89,6 +93,7 @@ class DataSetTumbleTimeWindowAggReduceCombineFunction(
       aggregateBuffer.setField(i, last.getField(i))
     }
 
+    val rowtimePos = groupKeysMapping.length + aggregates.length
     // set the rowtime attribute
     aggregateBuffer.setField(rowtimePos, last.getField(rowtimePos))
 

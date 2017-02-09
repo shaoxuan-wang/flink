@@ -174,7 +174,6 @@ class DataStreamAggregate(
             inputType,
             grouping.length)) {
 
-        if (true) {
           // do Incremental Aggregation
 
 
@@ -225,31 +224,30 @@ class DataStreamAggregate(
           .name(keyedAggOpName)
           .asInstanceOf[DataStream[Any]]
 
-        }
-        else {//withoutmerge
-          // do Incremental Aggregation
-          val (initialValue, foldFunction, newmapFunction) =
-            AggregateUtil.createOperatorFunctionsForStreamAggregates(
-              namedAggregates, inputType, rowRelDataType, grouping)
-          //        if (groupingKeys.length > 0) {
-          val windowFunction = AggregateUtil.createWindowIncrementalAggregationFunction(
-            window,
-            namedAggregates,
-            inputType,
-            rowRelDataType,
-            grouping,
-            namedProperties)
-
-          val keyedStream = inputDS.asInstanceOf[DataStream[Row]].keyBy(groupingKeys: _*)
-          val windowedStream =
-            createKeyedWindowedStream(window, keyedStream)
-            .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
-
-          windowedStream
-          .fold(initialValue, foldFunction, windowFunction)
-          .name(keyedAggOpName)
-          .asInstanceOf[DataStream[Any]]
-        }
+//        else {//withoutmerge
+//          // do Incremental Aggregation
+//          val (initialValue, foldFunction, newmapFunction) =
+//            AggregateUtil.createOperatorFunctionsForStreamAggregates(
+//              namedAggregates, inputType, rowRelDataType, grouping)
+//          //        if (groupingKeys.length > 0) {
+//          val windowFunction = AggregateUtil.createWindowIncrementalAggregationFunction(
+//            window,
+//            namedAggregates,
+//            inputType,
+//            rowRelDataType,
+//            grouping,
+//            namedProperties)
+//
+//          val keyedStream = inputDS.asInstanceOf[DataStream[Row]].keyBy(groupingKeys: _*)
+//          val windowedStream =
+//            createKeyedWindowedStream(window, keyedStream)
+//            .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
+//
+//          windowedStream
+//          .fold(initialValue, foldFunction, windowFunction)
+//          .name(keyedAggOpName)
+//          .asInstanceOf[DataStream[Any]]
+//        }
 
 //        }
         // global / non-keyed aggregation

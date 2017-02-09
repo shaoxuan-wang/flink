@@ -39,28 +39,29 @@ import org.apache.flink.util.{Collector, Preconditions}
   *                         and output Row.
   * @param aggregateMapping The index mapping between aggregate function list and aggregated value
   *                         index in output Row.
-  * @param intermediateRowArity The intermediate row field count
   * @param finalRowArity The output row field count
   */
 class DataSetTumbleTimeWindowAggReduceGroupFunction(
-    rowtimePos: Int,
     windowSize: Long,
     windowStartPos: Option[Int],
     windowEndPos: Option[Int],
     aggregates: Array[Aggregate[_ <: Any]],
     groupKeysMapping: Array[(Int, Int)],
     aggregateMapping: Array[(Int, Int)],
-    intermediateRowArity: Int,
     finalRowArity: Int)
   extends RichGroupReduceFunction[Row, Row] {
 
   private var collector: TimeWindowPropertyCollector = _
   protected var aggregateBuffer: Row = _
   private var output: Row = _
+  private val accumStartPos: Int = groupKeysMapping.length
+  private val rowtimePos: Int = accumStartPos + aggregates.length
+  private val intermediateRowArity: Int = rowtimePos + 1
 
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
     Preconditions.checkNotNull(groupKeysMapping)
+
     aggregateBuffer = new Row(intermediateRowArity)
     output = new Row(finalRowArity)
     collector = new TimeWindowPropertyCollector(windowStartPos, windowEndPos)
@@ -69,7 +70,11 @@ class DataSetTumbleTimeWindowAggReduceGroupFunction(
   override def reduce(records: Iterable[Row], out: Collector[Row]): Unit = {
 
     // initiate intermediate aggregate value.
-    aggregates.foreach(_.initiate(aggregateBuffer))
+    for (i <- aggregates.indices) {
+      val agg = aggregates(i)
+      val accumulator = agg.createAccumulator()
+      aggregateBuffer.setField(accumStartPos + i, accumulator)
+    }
 
     // merge intermediate aggregate value to buffer.
     var last: Row = null
@@ -77,7 +82,12 @@ class DataSetTumbleTimeWindowAggReduceGroupFunction(
     val iterator = records.iterator()
     while (iterator.hasNext) {
       val record = iterator.next()
-      aggregates.foreach(_.merge(record, aggregateBuffer))
+      for (i <- aggregates.indices) {
+        val agg = aggregates(i)
+        val aAccum = record.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        val bAccum = aggregateBuffer.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        aggregateBuffer.setField(accumStartPos + i, agg.merge(aAccum, bAccum))
+      }
       last = record
     }
 
@@ -90,7 +100,12 @@ class DataSetTumbleTimeWindowAggReduceGroupFunction(
     // evaluate final aggregate value and set to output.
     aggregateMapping.foreach {
       case (after, previous) =>
-        output.setField(after, aggregates(previous).evaluate(aggregateBuffer))
+      {
+        val accumulator =
+          aggregateBuffer.getField(accumStartPos + previous).asInstanceOf[Accumulator]
+        val result = aggregates(previous).getResult(accumulator)
+        output.setField(after, result)
+      }
     }
 
     // get window start timestamp

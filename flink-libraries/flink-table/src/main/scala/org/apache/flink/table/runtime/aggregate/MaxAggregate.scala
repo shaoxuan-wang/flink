@@ -28,30 +28,6 @@ abstract class MaxAggregate[T](implicit ord: Ordering[T]) extends Aggregate[T] {
 
   protected var max: Option[T] = None
 
-  override def init(): Unit = {
-    max = None
-  }
-
-  override def accumulate(input: Any): Unit = {
-    if (input != null) {
-      val value = input.asInstanceOf[T]
-      if (max.isEmpty) {
-        max = Some(input.asInstanceOf[T])
-      } else {
-        val maxValue : T = if (ord.compare(value, max.get) > 0) value else max.get
-        max = Some(maxValue)
-      }
-    }
-  }
-
-  override def finish(): T = {
-    if (max.isEmpty) {
-      null.asInstanceOf[T]
-    } else {
-      max.get
-    }
-  }
-
   override def supportPartial: Boolean = true
   /**
    * Initiate the intermediate aggregate value in Row.

@@ -128,7 +128,7 @@ object AggregateUtil {
       groupings.length)
 
     val mapReturnType: RowTypeInfo =
-      createAggregateBufferDataType(groupings, aggregates, inputType, Some(Array(Types.LONG)))
+      createDataSetAggregateBufferDataType(groupings, aggregates, inputType, Some(Array(Types.LONG)))
 
     val (timeFieldPos, tumbleTimeWindowSize) = window match {
       case EventTimeTumblingGroupWindow(_, time, size) =>
@@ -199,27 +199,23 @@ object AggregateUtil {
         if (aggregates.forall(_.supportPartial)) {
           // for incremental aggregations
           new DataSetTumbleTimeWindowAggReduceCombineFunction(
-            intermediateRowArity,
             asLong(size),
             startPos,
             endPos,
             aggregates,
             groupingOffsetMapping,
             aggOffsetMapping,
-            intermediateRowArity + 1, // the additional field is used to store the time attribute
             outputType.getFieldCount)
         }
         else {
           // for non-incremental aggregations
           new DataSetTumbleTimeWindowAggReduceGroupFunction(
-            intermediateRowArity - 1,
             asLong(size),
             startPos,
             endPos,
             aggregates,
             groupingOffsetMapping,
             aggOffsetMapping,
-            intermediateRowArity,
             outputType.getFieldCount)
         }
       case EventTimeTumblingGroupWindow(_, _, size) =>
@@ -229,7 +225,6 @@ object AggregateUtil {
           aggregates,
           groupingOffsetMapping,
           aggOffsetMapping,
-          intermediateRowArity + 1,// the additional field is used to store the time attribute
           outputType.getFieldCount)
 
       case EventTimeSessionGroupWindow(_, _, gap) =>
@@ -238,8 +233,6 @@ object AggregateUtil {
           aggregates,
           groupingOffsetMapping,
           aggOffsetMapping,
-          // the additional two fields are used to store window-start and window-end attributes
-          intermediateRowArity + 2,
           outputType.getFieldCount,
           startPos,
           endPos,
@@ -288,7 +281,7 @@ object AggregateUtil {
     window match {
       case EventTimeSessionGroupWindow(_, _, gap) =>
         val combineReturnType: RowTypeInfo =
-          createAggregateBufferDataType(
+          createDataSetAggregateBufferDataType(
             groupings,
             aggregates,
             inputType,
@@ -297,8 +290,6 @@ object AggregateUtil {
         new DataSetSessionWindowAggregateCombineGroupFunction(
           aggregates,
           groupings,
-          // the addition two fields are used to store window-start and window-end attributes
-          intermediateRowArity + 2,
           asLong(gap),
           combineReturnType)
       case _ =>
@@ -424,17 +415,17 @@ object AggregateUtil {
   }
 
 
-  private def createFoldInitialValue(
-      groupings: Array[Int],
-      aggregates: Array[Aggregate[_]]): Row = {
-
-    val row: Row = new Row(groupings.length + aggregates.length)
-    aggregates.zipWithIndex.foreach{ case (agg, index) =>
-      row.setField(groupings.length + index, agg)
-      agg.init()
-    }
-    row
-  }
+//  private def createFoldInitialValue(
+//      groupings: Array[Int],
+//      aggregates: Array[Aggregate[_]]): Row = {
+//
+//    val row: Row = new Row(groupings.length + aggregates.length)
+//    aggregates.zipWithIndex.foreach{ case (agg, index) =>
+//      row.setField(groupings.length + index, agg)
+//      agg.init()
+//    }
+//    row
+//  }
 
 
   private def createAggregateResultDataType(
@@ -468,38 +459,38 @@ object AggregateUtil {
     *
     * }}}
     */
-  def createOperatorFunctionsForStreamAggregates(
-      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
-      inputType: RelDataType, outputType: RelDataType,
-      groupings: Array[Int]): (Row, FoldFunction[Row, Row], MapFunction[Row, Row]) = {
-
-    val (aggFieldIndexes, aggregates) =
-      transformToAggregateFunctions(namedAggregates.map(_.getKey), inputType, groupings.length)
-
-    // the mapping relation between field index of grouping keys and output Row.
-    val groupingOffsetMapping = getGroupKeysMapping(inputType, outputType, groupings)
-
-    // the mapping relation between aggregate function index in list and its corresponding
-    // field index in output Row.
-    val aggOffsetMapping = getAggregateMapping(namedAggregates, outputType)
-
-    if (groupingOffsetMapping.length != groupings.length ||
-      aggOffsetMapping.length != namedAggregates.length) {
-      throw new TableException("Could not find output field in input data type " +
-                                 "or aggregate functions.")
-    }
-
-    val foldPartialReturnType = createAggregatePartialDataType(inputType, groupings, aggregates)
-    val foldFunction = new AggFoldFunction(aggFieldIndexes, groupings,
-                                           aggOffsetMapping, foldPartialReturnType)
-    val foldInitialValue = createFoldInitialValue(groupings, aggregates)
-
-    val mapResultReturnType = createAggregateResultDataType(outputType)
-    val mapFunction =
-      new AggMapFunction(groupingOffsetMapping, aggOffsetMapping, mapResultReturnType)
-
-    (foldInitialValue, foldFunction, mapFunction)
-  }
+//  def createOperatorFunctionsForStreamAggregates(
+//      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+//      inputType: RelDataType, outputType: RelDataType,
+//      groupings: Array[Int]): (Row, FoldFunction[Row, Row], MapFunction[Row, Row]) = {
+//
+//    val (aggFieldIndexes, aggregates) =
+//      transformToAggregateFunctions(namedAggregates.map(_.getKey), inputType, groupings.length)
+//
+//    // the mapping relation between field index of grouping keys and output Row.
+//    val groupingOffsetMapping = getGroupKeysMapping(inputType, outputType, groupings)
+//
+//    // the mapping relation between aggregate function index in list and its corresponding
+//    // field index in output Row.
+//    val aggOffsetMapping = getAggregateMapping(namedAggregates, outputType)
+//
+//    if (groupingOffsetMapping.length != groupings.length ||
+//      aggOffsetMapping.length != namedAggregates.length) {
+//      throw new TableException("Could not find output field in input data type " +
+//                                 "or aggregate functions.")
+//    }
+//
+//    val foldPartialReturnType = createAggregatePartialDataType(inputType, groupings, aggregates)
+//    val foldFunction = new AggFoldFunction(aggFieldIndexes, groupings,
+//                                           aggOffsetMapping, foldPartialReturnType)
+//    val foldInitialValue = createFoldInitialValue(groupings, aggregates)
+//
+//    val mapResultReturnType = createAggregateResultDataType(outputType)
+//    val mapFunction =
+//      new AggMapFunction(groupingOffsetMapping, aggOffsetMapping, mapResultReturnType)
+//
+//    (foldInitialValue, foldFunction, mapFunction)
+//  }
 
   /* public class Average implements AggregateFunction<Integer, AverageAccumulator, Double> {
     *
@@ -882,18 +873,18 @@ object AggregateUtil {
       aggregateCall.getAggregation match {
         case _: SqlSumAggFunction | _: SqlSumEmptyIsZeroAggFunction => {
           aggregates(index) = sqlTypeName match {
-//            case TINYINT =>
-//              new ByteSumAggregate
-//            case SMALLINT =>
-//              new ShortSumAggregate
-//            case INTEGER =>
-//              new IntSumAggregate
-//            case BIGINT =>
-//              new LongSumAggregate
-//            case FLOAT =>
-//              new FloatSumAggregate
-//            case DOUBLE =>
-//              new DoubleSumAggregate
+            case TINYINT =>
+              new ByteSumAggregate
+            case SMALLINT =>
+              new ShortSumAggregate
+            case INTEGER =>
+              new IntSumAggregate
+            case BIGINT =>
+              new LongSumAggregate
+            case FLOAT =>
+              new FloatSumAggregate
+            case DOUBLE =>
+              new DoubleSumAggregate
 //            case DECIMAL =>
 //              new DecimalSumAggregate
             case sqlType: SqlTypeName =>
@@ -970,7 +961,7 @@ object AggregateUtil {
         case unSupported: SqlAggFunction =>
           throw new TableException("unsupported Function: " + unSupported.getName)
       }
-//      setAggregateDataOffset(index)
+      setAggregateDataOffset(index)
     }
 
     // set the aggregate intermediate data start index in Row, and update current value.
@@ -980,6 +971,31 @@ object AggregateUtil {
     }
 
     (aggFieldIndexes, aggregates)
+  }
+
+  private def createDataSetAggregateBufferDataType(
+      groupings: Array[Int],
+      aggregates: Array[Aggregate[_]],
+      inputType: RelDataType,
+      windowKeyTypes: Option[Array[TypeInformation[_]]] = None): RowTypeInfo = {
+
+    // get the field data types of group keys.
+    val groupingTypes: Seq[TypeInformation[_]] = groupings
+                                                 .map(inputType.getFieldList.get(_).getType)
+                                                 .map(FlinkTypeFactory.toTypeInfo)
+
+    // get all field data types of all intermediate aggregates
+    val aggTypes: Seq[TypeInformation[_]] = aggregates.map { agg =>
+      val clazz: Class[_] = agg.getClass
+      TypeInformation.of(clazz)
+    }
+
+    // concat group key types, aggregation types, and window key types
+    val allFieldTypes:Seq[TypeInformation[_]] = windowKeyTypes match {
+      case None => groupingTypes ++: aggTypes
+      case _ => groupingTypes ++: aggTypes ++: windowKeyTypes.get
+    }
+    new RowTypeInfo(allFieldTypes :_*)
   }
 
   private def createAggregateBufferDataType(

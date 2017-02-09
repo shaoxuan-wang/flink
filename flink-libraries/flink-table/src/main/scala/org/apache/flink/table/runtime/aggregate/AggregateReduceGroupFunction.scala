@@ -82,6 +82,7 @@ class AggregateReduceGroupFunction(
 //      aggregates.foreach(_.merge(record, aggregateBuffer))
 //      last = record
 //    })
+    /*
     aggregates.zipWithIndex.foreach { case (udaf, index) =>
       udaf.init()
     }
@@ -123,6 +124,7 @@ class AggregateReduceGroupFunction(
           output.setField(outputIndex, !intermediateGroupKeys.get.contains(inputIndex))
       }
     }
+    */
 
     out.collect(output)
   }

@@ -35,7 +35,6 @@ import org.apache.flink.util.{Collector, Preconditions}
   *                         and output Row.
   * @param aggregateMapping The index mapping between aggregate function list and aggregated value
   *                         index in output Row.
-  * @param intermediateRowArity The intermediate row field count
   * @param finalRowArity The output row field count
   */
 class DataSetTumbleCountWindowAggReduceGroupFunction(
@@ -43,12 +42,13 @@ class DataSetTumbleCountWindowAggReduceGroupFunction(
     private val aggregates: Array[Aggregate[_ <: Any]],
     private val groupKeysMapping: Array[(Int, Int)],
     private val aggregateMapping: Array[(Int, Int)],
-    private val intermediateRowArity: Int,
     private val finalRowArity: Int)
   extends RichGroupReduceFunction[Row, Row] {
 
   private var aggregateBuffer: Row = _
   private var output: Row = _
+  private val accumStartPos: Int = groupKeysMapping.length
+  private val intermediateRowArity: Int = accumStartPos + aggregates.length + 1
 
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
@@ -67,10 +67,20 @@ class DataSetTumbleCountWindowAggReduceGroupFunction(
       val record = iterator.next()
       if (count == 0) {
         // initiate intermediate aggregate value.
-        aggregates.foreach(_.initiate(aggregateBuffer))
+        for (i <- aggregates.indices) {
+          val agg = aggregates(i)
+          val accumulator = agg.createAccumulator()
+          aggregateBuffer.setField(accumStartPos + i, accumulator)
+        }
       }
+
       // merge intermediate aggregate value to buffer.
-      aggregates.foreach(_.merge(record, aggregateBuffer))
+      for (i <- aggregates.indices) {
+        val agg = aggregates(i)
+        val aAccum = record.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        val bAccum = aggregateBuffer.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        aggregateBuffer.setField(accumStartPos + i, agg.merge(aAccum, bAccum))
+      }
 
       count += 1
       if (windowSize == count) {
@@ -82,8 +92,14 @@ class DataSetTumbleCountWindowAggReduceGroupFunction(
         // evaluate final aggregate value and set to output.
         aggregateMapping.foreach {
           case (after, previous) =>
-            output.setField(after, aggregates(previous).evaluate(aggregateBuffer))
+          {
+            val accumulator =
+              aggregateBuffer.getField(accumStartPos + previous).asInstanceOf[Accumulator]
+            val result = aggregates(previous).getResult(accumulator)
+            output.setField(after, result)
+          }
         }
+
         // emit the output
         out.collect(output)
         count = 0

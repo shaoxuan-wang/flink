@@ -32,26 +32,26 @@ import org.apache.flink.util.{Collector, Preconditions}
   *
   * @param aggregates The aggregate functions.
   * @param groupingKeys The indexes of the grouping fields.
-  * @param intermediateRowArity The intermediate row field count.
   * @param gap  Session time window gap.
   * @param intermediateRowType Intermediate row data type.
   */
 class DataSetSessionWindowAggregateCombineGroupFunction(
     aggregates: Array[Aggregate[_ <: Any]],
     groupingKeys: Array[Int],
-    intermediateRowArity: Int,
     gap: Long,
     @transient intermediateRowType: TypeInformation[Row])
   extends RichGroupCombineFunction[Row,Row] with ResultTypeQueryable[Row] {
 
   private var aggregateBuffer: Row = _
   private var rowTimeFieldPos = 0
+  private var accumStartPos: Int = 0
 
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
     Preconditions.checkNotNull(groupingKeys)
-    aggregateBuffer = new Row(intermediateRowArity)
-    rowTimeFieldPos = intermediateRowArity - 2
+    accumStartPos = groupingKeys.length
+    rowTimeFieldPos = accumStartPos + aggregates.length
+    aggregateBuffer = new Row(rowTimeFieldPos + 2)
   }
 
   /**
@@ -88,12 +88,22 @@ class DataSetSessionWindowAggregateCombineGroupFunction(
         }
 
         // initiate intermediate aggregate value.
-        aggregates.foreach(_.initiate(aggregateBuffer))
+        for (i <- aggregates.indices) {
+          val agg = aggregates(i)
+          val accumulator = agg.createAccumulator()
+          aggregateBuffer.setField(accumStartPos + i, accumulator)
+        }
+
         windowStart = record.getField(rowTimeFieldPos).asInstanceOf[Long]
       }
 
       // merge intermediate aggregate value to the buffered value.
-      aggregates.foreach(_.merge(record, aggregateBuffer))
+      for (i <- aggregates.indices) {
+        val agg = aggregates(i)
+        val aAccum = record.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        val bAccum = aggregateBuffer.getField(accumStartPos + i).asInstanceOf[Accumulator]
+        aggregateBuffer.setField(accumStartPos + i, agg.merge(aAccum, bAccum))
+      }
 
       // the current rowtime is the last rowtime of the next calculation.
       windowEnd = currentRowTime + gap

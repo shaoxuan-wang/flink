@@ -76,10 +76,13 @@ class IncrementalAggregateWindowFunction[W <: Window](
       }
 
       // Evaluate final aggregate value and set to output.
+      /*
       aggregateMapping.foreach {
         case (after, previous) =>
           output.setField(after, aggregates(previous).finish())
       }
+      */
+
 //      // Evaluate final aggregate value and set to output.
 //      aggregateMapping.foreach {
 //        case (after, previous) =>

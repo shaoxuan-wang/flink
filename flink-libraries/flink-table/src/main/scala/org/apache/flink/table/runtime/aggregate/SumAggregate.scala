@@ -22,6 +22,10 @@ import java.math.BigDecimal
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo
 import org.apache.flink.types.Row
 
+class SumAccumulator[T] extends Accumulator{
+  var sum: Option[T] = None
+}
+
 abstract class SumAggregate[T: Numeric]
   extends Aggregate[T] {
 
@@ -30,26 +34,40 @@ abstract class SumAggregate[T: Numeric]
 
   protected var sum: Option[T] = None
 
-  override def init(): Unit = {
-    // ignore
+  override def createAccumulator():Accumulator = {
+    new SumAccumulator[T]
   }
 
-  override def accumulate(input: Any): Unit = {
-    if (input != null) {
-      val value = input.asInstanceOf[T]
-      if (sum.isEmpty) {
-        sum = Some(value)
+  override def add(accumulator: Accumulator, value: Any) = {
+    if (value != null && accumulator != null) {
+      val v = value.asInstanceOf[T]
+      val accum = accumulator.asInstanceOf[SumAccumulator[T]]
+      if (accum.sum.isEmpty) {
+        accum.sum = Some(v)
       } else {
-        sum = Some(numeric.plus(value, sum.get))
+        accum.sum = Some(numeric.plus(v, accum.sum.get))
       }
     }
   }
 
-  override def finish(): T = {
-    if (sum.isEmpty) {
-      null.asInstanceOf[T]
+  override def getResult(accumulator: Accumulator): T = {
+    accumulator.asInstanceOf[SumAccumulator[T]].sum match {
+      case Some(i) => i.asInstanceOf[T]
+    }
+  }
+
+  override def merge(a: Accumulator, b: Accumulator): Accumulator = {
+    val aSum = a.asInstanceOf[SumAccumulator[T]].sum
+    val bSum = b.asInstanceOf[SumAccumulator[T]].sum
+    if (aSum == None) {
+      b
+    } else if (bSum == None) {
+      a
     } else {
-      sum.get
+      a.asInstanceOf[SumAccumulator[T]].sum =
+        Some(numeric.plus(a.asInstanceOf[SumAccumulator[T]].sum.get,
+                          b.asInstanceOf[SumAccumulator[T]].sum.get))
+      a
     }
   }
 
@@ -88,31 +106,31 @@ abstract class SumAggregate[T: Numeric]
     sumIndex = aggOffset
   }
 }
-//
-//class ByteSumAggregate extends SumAggregate[Byte] {
-//  override def intermediateDataType = Array(BasicTypeInfo.BYTE_TYPE_INFO)
-//}
-//
-//class ShortSumAggregate extends SumAggregate[Short] {
-//  override def intermediateDataType = Array(BasicTypeInfo.SHORT_TYPE_INFO)
-//}
-//
-//class IntSumAggregate extends SumAggregate[Int] {
-//  override def intermediateDataType = Array(BasicTypeInfo.INT_TYPE_INFO)
-//}
-//
-//class LongSumAggregate extends SumAggregate[Long] {
-//  override def intermediateDataType = Array(BasicTypeInfo.LONG_TYPE_INFO)
-//}
-//
-//class FloatSumAggregate extends SumAggregate[Float] {
-//  override def intermediateDataType = Array(BasicTypeInfo.FLOAT_TYPE_INFO)
-//}
-//
-//class DoubleSumAggregate extends SumAggregate[Double] {
-//  override def intermediateDataType = Array(BasicTypeInfo.DOUBLE_TYPE_INFO)
-//}
-//
+
+class ByteSumAggregate extends SumAggregate[Byte] {
+  override def intermediateDataType = Array(BasicTypeInfo.BYTE_TYPE_INFO)
+}
+
+class ShortSumAggregate extends SumAggregate[Short] {
+  override def intermediateDataType = Array(BasicTypeInfo.SHORT_TYPE_INFO)
+}
+
+class IntSumAggregate extends SumAggregate[Int] {
+  override def intermediateDataType = Array(BasicTypeInfo.INT_TYPE_INFO)
+}
+
+class LongSumAggregate extends SumAggregate[Long] {
+  override def intermediateDataType = Array(BasicTypeInfo.LONG_TYPE_INFO)
+}
+
+class FloatSumAggregate extends SumAggregate[Float] {
+  override def intermediateDataType = Array(BasicTypeInfo.FLOAT_TYPE_INFO)
+}
+
+class DoubleSumAggregate extends SumAggregate[Double] {
+  override def intermediateDataType = Array(BasicTypeInfo.DOUBLE_TYPE_INFO)
+}
+
 //class DecimalSumAggregate extends Aggregate[BigDecimal] {
 //
 //  protected var sumIndex: Int = _

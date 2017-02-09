@@ -50,8 +50,6 @@ class AggAggregateFunction(
         val myValue = value.getField(1) //should be truct here, 1 because the key is now supposed
         // to be 1
         agg.add(myAccum, myValue)
-
-        accumulator
       }
     }
 
@@ -94,7 +92,6 @@ class AggAggregateFunction(
       {
         val myAccum = accumulator.getField(index + groupKeys.length).asInstanceOf[Accumulator]
         output.setField(groupings.length + index, agg.getResult(myAccum))
-        accumulator
       }
     }
 

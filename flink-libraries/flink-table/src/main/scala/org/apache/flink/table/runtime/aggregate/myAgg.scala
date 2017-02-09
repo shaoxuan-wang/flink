@@ -35,10 +35,6 @@ class myAgg extends Aggregate[Long] {
     count = 0
   }
 
-  override def init(): Unit = {
-    count = 50
-  }
-
   override def merge(intermediate: Row, buffer: Row): Unit = {
     val partialCount = intermediate.getField(countIndex).asInstanceOf[Long]
     val bufferCount = buffer.getField(countIndex).asInstanceOf[Long]
@@ -48,17 +44,6 @@ class myAgg extends Aggregate[Long] {
 
   override def evaluate(buffer: Row): Long = {
     buffer.getField(countIndex).asInstanceOf[Long]
-  }
-
-  override def accumulate(input: Any): Unit = {
-    if (input != null) {
-      count += 1
-    }
-  }
-
-  override def finish(): Long = {
-    count
-    //iterator
   }
 
   override def prepare(value: Any, intermediate: Row): Unit = {
