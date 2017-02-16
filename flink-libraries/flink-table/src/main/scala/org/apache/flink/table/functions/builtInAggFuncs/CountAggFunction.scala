@@ -43,7 +43,6 @@ class CountAggFunction extends AggregateFunction[Long] {
     new CountAccumulator
   }
 
-  override def supportPartialMerge = true
 }
 
 /**

@@ -43,17 +43,6 @@ abstract class AggregateFunction[T] extends UserDefinedFunction {
     * Merge two accumulator instances into one accumulator instance.
     */
   def merge(a: Accumulator, b: Accumulator): Accumulator
-
-  /**
-    * A flag indicating whether this [[AggregateFunction]] supports partial
-    * merge or not.
-    * TODO: Alternatively, we can check if a merge function is provided to
-    * decide whether an aggregate function supports partial merge or not.
-    * But this needs the refactoring the AggregateFunction interface with
-    * code generation. We will remove this interface once codeGen for UDAGG
-    * is completed (FLINK-5813).
-    */
-  def supportPartialMerge: Boolean
 }
 
 /**
