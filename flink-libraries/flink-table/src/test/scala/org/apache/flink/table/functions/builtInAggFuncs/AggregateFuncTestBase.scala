@@ -20,6 +20,7 @@ package org.apache.flink.table.functions.builtInAggFuncs
 import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
 import java.math.BigDecimal
 
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
 import org.apache.flink.types.Row
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -39,15 +40,16 @@ abstract class AggregateFuncTestBase[T] {
   def testAggregate(): Unit = {
     // iterate over input sets
     for((vals, expected) <- inputValueSets.zip(expectedResults)) {
-      val resultRow = if (aggregator.supportPartialMerge) {
-        // test with combiner
-        val (firstVals, secondVals) = vals.splitAt(vals.length / 2)
-        val combined = aggregateVals(firstVals) :: aggregateVals(secondVals) :: Nil
-        mergeRows(combined)
-      } else {
-        // test without combiner
-        aggregateVals(vals)
-      }
+      val resultRow =
+        if (ifMethodExitInFunction("merge", aggregator)) {
+          // test with combiner when merge method is provided
+          val (firstVals, secondVals) = vals.splitAt(vals.length / 2)
+          val combined = aggregateVals(firstVals) :: aggregateVals(secondVals) :: Nil
+          mergeRows(combined)
+        } else {
+          // test without combiner when merge method is not provided
+          aggregateVals(vals)
+        }
       val result = getResult(resultRow)
 
       (expected, result) match {
