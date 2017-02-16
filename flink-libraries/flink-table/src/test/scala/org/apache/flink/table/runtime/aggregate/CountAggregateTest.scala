@@ -18,7 +18,20 @@
 
 package org.apache.flink.table.runtime.aggregate
 
-class CountAggregateTest extends AggregateTestBase[Long] {
+//class NewCountAggregateTest extends NewAggregateTestBase[Long] {
+//
+//  override def inputValueSets: Seq[Seq[_]] = Seq(
+//    Seq("a", "b", null, "c", null, "d", "e", null, "f"),
+//    Seq(null, null, null, null, null, null)
+//  )
+//
+//  override def expectedResults: Seq[Long] = Seq(6L, 0L)
+//
+//  override def aggregator: Aggregate[Long] = new CountAggregate()
+//}
+
+
+class CountAggregateTest extends AggregateFunctionTestBase[Long] {
 
   override def inputValueSets: Seq[Seq[_]] = Seq(
     Seq("a", "b", null, "c", null, "d", "e", null, "f"),

@@ -30,16 +30,28 @@ class CountAggregate extends Aggregate[Long] {
   var count: Long = 0
 
   override def add(accumulator: Accumulator, value: Any) = {
-    accumulator.asInstanceOf[CountAccumulator].count += 1
+    if (value != null) {
+      accumulator.asInstanceOf[CountAccumulator].count += 1
+    }
   }
 
   override def getResult(accumulator: Accumulator): Long = {
-    accumulator.asInstanceOf[CountAccumulator].count
+    if (accumulator != null) {
+      accumulator.asInstanceOf[CountAccumulator].count
+    } else {
+      0
+    }
   }
 
   override def merge(a: Accumulator, b: Accumulator): Accumulator = {
-    a.asInstanceOf[CountAccumulator].count += b.asInstanceOf[CountAccumulator].count
-    a
+    if (a == null) {
+      b
+    } else if (b == null) {
+      a
+    } else {
+      a.asInstanceOf[CountAccumulator].count += b.asInstanceOf[CountAccumulator].count
+      a
+    }
   }
 
   override def createAccumulator():Accumulator = {

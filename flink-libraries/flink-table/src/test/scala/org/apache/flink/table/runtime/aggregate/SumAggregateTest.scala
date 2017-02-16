@@ -20,7 +20,7 @@ package org.apache.flink.table.runtime.aggregate
 
 import java.math.BigDecimal
 
-abstract class SumAggregateTestBase[T: Numeric] extends AggregateTestBase[T] {
+abstract class SumAggregateTestBase[T: Numeric] extends AggregateFunctionTestBase[T] {
 
   private val numeric: Numeric[T] = implicitly[Numeric[T]]
 
