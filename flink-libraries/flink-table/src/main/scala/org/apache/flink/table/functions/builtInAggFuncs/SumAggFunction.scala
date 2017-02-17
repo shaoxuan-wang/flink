@@ -18,11 +18,7 @@
 package org.apache.flink.table.functions.builtInAggFuncs
 
 import java.math.BigDecimal
-
-import org.apache.flink.api.common.typeinfo.BasicTypeInfo
 import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
-import org.apache.flink.table.runtime.aggregate.Aggregate
-import org.apache.flink.types.Row
 
 /**
   * Base class for built-in Sum aggregate function
@@ -58,16 +54,8 @@ abstract class SumAggFunction[T: Numeric] extends AggregateFunction[T] {
   }
 
   override def merge(a: Accumulator, b: Accumulator): Accumulator = {
-    val aAccum = a.asInstanceOf[SumAccumulator[T]]
-    val bAccum = b.asInstanceOf[SumAccumulator[T]]
-    if (aAccum.sum.isEmpty) {
-      b
-    } else if (bAccum.sum.isEmpty) {
-      a
-    } else {
-      aAccum.sum = Some(numeric.plus(aAccum.sum.get, bAccum.sum.get))
-      a
-    }
+    accumulate(a, b.asInstanceOf[SumAccumulator[T]].sum.get)
+    a
   }
 
 }
@@ -141,16 +129,8 @@ class DecimalSumAggFunction extends AggregateFunction[BigDecimal] {
   }
 
   override def merge(a: Accumulator, b: Accumulator): Accumulator = {
-    val aAccum = a.asInstanceOf[DecimalSumAccumulator]
-    val bAccum = b.asInstanceOf[DecimalSumAccumulator]
-    if (aAccum.sum == null) {
-      b
-    } else if (bAccum.sum == null) {
-      a
-    } else {
-      aAccum.sum = aAccum.sum.add(bAccum.sum)
-      a
-    }
+    accumulate(a, b.asInstanceOf[DecimalSumAccumulator].sum)
+    a
   }
 
 }
