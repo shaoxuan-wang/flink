@@ -23,7 +23,7 @@ import org.apache.flink.table.functions.AggregateFunction
 /**
   * Test case for built-in count aggregate function
   */
-class CountAggFunctionTest extends AggregateFuncTestBase[Long] {
+class CountAggFunctionTest extends AggFunctionTestBase[Long] {
 
   override def inputValueSets: Seq[Seq[_]] = Seq(
     Seq("a", "b", null, "c", null, "d", "e", null, "f"),

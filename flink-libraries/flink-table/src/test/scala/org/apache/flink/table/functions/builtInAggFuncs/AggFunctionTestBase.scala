@@ -28,7 +28,7 @@ import org.junit.Assert.assertEquals
 /**
   * Base class for aggregate function test
   */
-abstract class AggregateFuncTestBase[T] {
+abstract class AggFunctionTestBase[T] {
   private val offset = 2
   private val numOfAggregates = 1
   private val rowArity = offset + numOfAggregates
@@ -37,28 +37,39 @@ abstract class AggregateFuncTestBase[T] {
   def aggregator: AggregateFunction[T]
 
   @Test
-  def testAggregate(): Unit = {
+  // test aggregate functions without partial merge
+  def testAggregateWithoutMerge(): Unit = {
     // iterate over input sets
     for((vals, expected) <- inputValueSets.zip(expectedResults)) {
-      val resultRow =
-        if (ifMethodExitInFunction("merge", aggregator)) {
-          // test with combiner when merge method is provided
-          val (firstVals, secondVals) = vals.splitAt(vals.length / 2)
-          val combined = aggregateVals(firstVals) :: aggregateVals(secondVals) :: Nil
-          mergeRows(combined)
-        } else {
-          // test without combiner when merge method is not provided
-          aggregateVals(vals)
-        }
+      val resultRow = aggregateVals(vals)
       val result = getResult(resultRow)
+      validateResult(expected, result)
+    }
+  }
 
-      (expected, result) match {
-        case (e: BigDecimal, r: BigDecimal) =>
-          // BigDecimal.equals() value and scale but we are only interested in value.
-          assert(e.compareTo(r) == 0)
-        case _ =>
-          assertEquals(expected, result)
+  @Test
+  // test aggregate functions with partial merge
+  def testAggregateWithMerge(): Unit = {
+
+    if (ifMethodExitInFunction("merge", aggregator)) {
+      // iterate over input sets
+      for((vals, expected) <- inputValueSets.zip(expectedResults)) {
+        val (firstVals, secondVals) = vals.splitAt(vals.length / 2)
+        val combined = aggregateVals(firstVals) :: aggregateVals(secondVals) :: Nil
+        val resultRow = mergeRows(combined)
+        val result = getResult(resultRow)
+        validateResult(expected, result)
       }
+    }
+  }
+
+  private def validateResult(expected: T, result: T): Unit = {
+    (expected, result) match {
+      case (e: BigDecimal, r: BigDecimal) =>
+        // BigDecimal.equals() value and scale but we are only interested in value.
+        assert(e.compareTo(r) == 0)
+      case _ =>
+        assertEquals(expected, result)
     }
   }
 
