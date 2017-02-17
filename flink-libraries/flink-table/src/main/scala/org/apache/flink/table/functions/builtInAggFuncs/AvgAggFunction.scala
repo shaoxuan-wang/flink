@@ -246,5 +246,4 @@ class DecimalAvgAggFunction extends AggregateFunction[BigDecimal] {
     accumulate(a, b.asInstanceOf[DecimalAvgAccumulator].sum)
     a
   }
-
 }

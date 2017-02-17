@@ -48,5 +48,4 @@ class CountAggFunction extends AggregateFunction[Long] {
   override def createAccumulator():Accumulator = {
     new CountAccumulator
   }
-
 }

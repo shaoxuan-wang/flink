@@ -72,7 +72,6 @@ abstract class SumAggFunction[T: Numeric] extends AggregateFunction[T] {
       a
     }
   }
-
 }
 
 /**
@@ -110,6 +109,12 @@ class DoubleSumAggFunction extends SumAggFunction[Double]
   * Built-in Big Decimal Sum aggregate function
   */
 class DecimalSumAggFunction extends AggregateFunction[BigDecimal] {
+  /**
+    * The initial accumulator for Big Decimal Sum aggregate function
+    */
+  class DecimalSumAccumulator extends Accumulator {
+    var sum: BigDecimal = null
+  }
 
   override def createAccumulator(): Accumulator = {
     new DecimalSumAccumulator
@@ -140,12 +145,4 @@ class DecimalSumAggFunction extends AggregateFunction[BigDecimal] {
     accumulate(a, b.asInstanceOf[DecimalSumAccumulator].sum)
     a
   }
-
-}
-
-/**
-  * The initial accumulator for Big Decimal Sum aggregate function
-  */
-class DecimalSumAccumulator extends Accumulator {
-  var sum: BigDecimal = null
 }

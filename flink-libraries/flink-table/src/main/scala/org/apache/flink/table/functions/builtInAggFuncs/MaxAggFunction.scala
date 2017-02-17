@@ -53,7 +53,6 @@ abstract class MaxAggFunction[T](implicit ord: Ordering[T]) extends AggregateFun
     accumulate(a, b.asInstanceOf[MaxAccumulator[T]].max)
     a
   }
-
 }
 
 /**
@@ -105,5 +104,4 @@ class DecimalMaxAggFunction extends MaxAggFunction[BigDecimal] {
       }
     }
   }
-
 }
