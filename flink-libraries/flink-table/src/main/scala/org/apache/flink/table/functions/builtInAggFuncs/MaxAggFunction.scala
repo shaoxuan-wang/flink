@@ -24,6 +24,12 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
   * Base class for built-in Max aggregate function
   */
 abstract class MaxAggFunction[T](implicit ord: Ordering[T]) extends AggregateFunction[T] {
+  /**
+    * The initial accumulator for Max aggregate function
+    */
+  class MaxAccumulator[T] extends Accumulator {
+    var max: T = null.asInstanceOf[T]
+  }
 
   override def createAccumulator(): Accumulator = {
     new MaxAccumulator[T]
@@ -48,13 +54,6 @@ abstract class MaxAggFunction[T](implicit ord: Ordering[T]) extends AggregateFun
     a
   }
 
-}
-
-/**
-  * The initial accumulator for Max aggregate function
-  */
-class MaxAccumulator[T] extends Accumulator {
-  var max: T = null.asInstanceOf[T]
 }
 
 /**
@@ -93,7 +92,7 @@ class DoubleMaxAggFunction extends MaxAggFunction[Double]
 class BooleanMaxAggFunction extends MaxAggFunction[Boolean]
 
 /**
-  * Built-in BigDecimal Max aggregate function
+  * Built-in Big Decimal Max aggregate function
   */
 class DecimalMaxAggFunction extends MaxAggFunction[BigDecimal] {
 
