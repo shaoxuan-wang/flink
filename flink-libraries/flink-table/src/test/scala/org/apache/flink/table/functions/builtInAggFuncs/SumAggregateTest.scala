@@ -23,7 +23,7 @@ import java.math.BigDecimal
 
 import org.apache.flink.table.runtime.aggregate.{Aggregate, AggregateTestBase, DecimalSumAggregate}
 
-abstract class SumAggFunctionTestBase[T: Numeric] extends AggregateFuncTestBase[T] {
+abstract class SumAggFunctionTestBase[T: Numeric] extends AggFunctionTestBase[T] {
 
   private val numeric: Numeric[T] = implicitly[Numeric[T]]
 
@@ -104,7 +104,7 @@ class DoubleSumAggregateTest extends SumAggFunctionTestBase[Double] {
 }
 
 
-class DecimalSumAggFunctionTest extends AggregateFuncTestBase[BigDecimal] {
+class DecimalSumAggFunctionTest extends AggFunctionTestBase[BigDecimal] {
 
   override def inputValueSets: Seq[Seq[_]] = Seq(
     Seq(
