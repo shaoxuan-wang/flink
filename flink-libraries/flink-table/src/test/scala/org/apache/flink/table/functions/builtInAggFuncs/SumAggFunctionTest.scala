@@ -139,3 +139,5 @@ class DecimalSumAggFunctionTest extends AggFunctionTestBase[BigDecimal] {
 
   override def aggregator: AggregateFunction[BigDecimal] = new DecimalSumAggFunction()
 }
+
+

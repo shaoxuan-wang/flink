@@ -53,7 +53,6 @@ abstract class MinAggFunction[T](implicit ord: Ordering[T]) extends AggregateFun
     accumulate(a, b.asInstanceOf[MinAccumulator[T]].max)
     a
   }
-
 }
 
 /**
@@ -105,5 +104,4 @@ class DecimalMinAggFunction extends MinAggFunction[BigDecimal] {
       }
     }
   }
-
 }
