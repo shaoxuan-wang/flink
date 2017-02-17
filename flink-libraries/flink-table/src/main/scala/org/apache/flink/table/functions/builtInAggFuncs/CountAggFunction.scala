@@ -23,6 +23,12 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
   * built-in count aggregate function
   */
 class CountAggFunction extends AggregateFunction[Long] {
+  /**
+    * The initial accumulator for count aggregate function
+    */
+  class CountAccumulator extends Accumulator {
+    var count: Long = 0
+  }
 
   override def accumulate(accumulator: Accumulator, value: Any) = {
     if (value != null) {
@@ -43,11 +49,4 @@ class CountAggFunction extends AggregateFunction[Long] {
     new CountAccumulator
   }
 
-}
-
-/**
-  * The initial accumulator for count aggregate function
-  */
-class CountAccumulator extends Accumulator {
-  var count: Long = 0
 }

@@ -138,7 +138,7 @@ object UserDefinedFunctionUtils {
   def ifMethodExitInFunction(method: String, function: UserDefinedFunction): Boolean = {
     val methods = function
       .getClass
-      .getDeclaredMethods
+      .getMethods
       .filter {
         m => m.getName == method
       }

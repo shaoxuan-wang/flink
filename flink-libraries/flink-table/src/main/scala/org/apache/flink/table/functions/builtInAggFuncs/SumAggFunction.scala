@@ -24,6 +24,13 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
   * Base class for built-in Sum aggregate function
   */
 abstract class SumAggFunction[T: Numeric] extends AggregateFunction[T] {
+  /**
+    * The initial accumulator for Sum aggregate function
+    */
+  class SumAccumulator[T] extends Accumulator {
+    var sum: Option[T] = None
+  }
+
   private val numeric = implicitly[Numeric[T]]
 
   override def createAccumulator(): Accumulator = {
@@ -54,17 +61,18 @@ abstract class SumAggFunction[T: Numeric] extends AggregateFunction[T] {
   }
 
   override def merge(a: Accumulator, b: Accumulator): Accumulator = {
-    accumulate(a, b.asInstanceOf[SumAccumulator[T]].sum.get)
-    a
+    val aAccum = a.asInstanceOf[SumAccumulator[T]]
+    val bAccum = b.asInstanceOf[SumAccumulator[T]]
+    if (aAccum.sum.isEmpty) {
+      b
+    } else if (bAccum.sum.isEmpty) {
+      a
+    } else {
+      aAccum.sum = Some(numeric.plus(aAccum.sum.get, bAccum.sum.get))
+      a
+    }
   }
 
-}
-
-/**
-  * The initial accumulator for Sum aggregate function
-  */
-class SumAccumulator[T] extends Accumulator {
-  var sum: Option[T] = None
 }
 
 /**
@@ -99,7 +107,7 @@ class DoubleSumAggFunction extends SumAggFunction[Double]
 
 
 /**
-  * Base class for built-in Big Decimal Sum aggregate function
+  * Built-in Big Decimal Sum aggregate function
   */
 class DecimalSumAggFunction extends AggregateFunction[BigDecimal] {
 

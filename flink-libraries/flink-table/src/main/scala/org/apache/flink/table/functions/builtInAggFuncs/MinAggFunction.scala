@@ -24,6 +24,12 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
   * Base class for built-in Min aggregate function
   */
 abstract class MinAggFunction[T](implicit ord: Ordering[T]) extends AggregateFunction[T] {
+  /**
+    * The initial accumulator for Min aggregate function
+    */
+  class MinAccumulator[T] extends Accumulator {
+    var max: T = null.asInstanceOf[T]
+  }
 
   override def createAccumulator(): Accumulator = {
     new MinAccumulator[T]
@@ -48,13 +54,6 @@ abstract class MinAggFunction[T](implicit ord: Ordering[T]) extends AggregateFun
     a
   }
 
-}
-
-/**
-  * The initial accumulator for Min aggregate function
-  */
-class MinAccumulator[T] extends Accumulator {
-  var max: T = null.asInstanceOf[T]
 }
 
 /**
@@ -93,7 +92,7 @@ class DoubleMinAggFunction extends MinAggFunction[Double]
 class BooleanMinAggFunction extends MinAggFunction[Boolean]
 
 /**
-  * Built-in BigDecimal Min aggregate function
+  * Built-in Big Decimal Min aggregate function
   */
 class DecimalMinAggFunction extends MinAggFunction[BigDecimal] {
 
