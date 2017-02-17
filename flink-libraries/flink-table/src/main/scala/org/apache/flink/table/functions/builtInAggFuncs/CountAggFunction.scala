@@ -35,7 +35,7 @@ class CountAggFunction extends AggregateFunction[Long] {
   }
 
   override def merge(a: Accumulator, b: Accumulator): Accumulator = {
-    a.asInstanceOf[CountAccumulator].count += b.asInstanceOf[CountAccumulator].count
+    accumulate(a, b.asInstanceOf[CountAccumulator].count)
     a
   }
 

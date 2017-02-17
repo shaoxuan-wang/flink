@@ -61,42 +61,42 @@ abstract class SumAggFunctionTestBase[T: Numeric] extends AggFunctionTestBase[T]
   )
 }
 
-class ByteSumAggregateTest extends SumAggFunctionTestBase[Byte] {
+class ByteSumAggFunctionTest extends SumAggFunctionTestBase[Byte] {
 
   override def maxVal = (Byte.MaxValue / 2).toByte
 
   override def aggregator: AggregateFunction[Byte] = new ByteSumAggFunction
 }
 
-class ShortSumAggregateTest extends SumAggFunctionTestBase[Short] {
+class ShortSumAggFunctionTest extends SumAggFunctionTestBase[Short] {
 
   override def maxVal = (Short.MaxValue / 2).toShort
 
   override def aggregator: AggregateFunction[Short] = new ShortSumAggFunction
 }
 
-class IntSumAggregateTest extends SumAggFunctionTestBase[Int] {
+class IntSumAggFunctionTest extends SumAggFunctionTestBase[Int] {
 
   override def maxVal = Int.MaxValue / 2
 
   override def aggregator: AggregateFunction[Int] = new IntSumAggFunction
 }
 
-class LongSumAggregateTest extends SumAggFunctionTestBase[Long] {
+class LongSumAggFunctionTest extends SumAggFunctionTestBase[Long] {
 
   override def maxVal = Long.MaxValue / 2
 
   override def aggregator: AggregateFunction[Long] = new LongSumAggFunction
 }
 
-class FloatSumAggregateTest extends SumAggFunctionTestBase[Float] {
+class FloatSumAggFunctionTest extends SumAggFunctionTestBase[Float] {
 
   override def maxVal = 12345.6789f
 
   override def aggregator: AggregateFunction[Float] = new FloatSumAggFunction
 }
 
-class DoubleSumAggregateTest extends SumAggFunctionTestBase[Double] {
+class DoubleSumAggFunctionTest extends SumAggFunctionTestBase[Double] {
 
   override def maxVal = 12345.6789d
 
