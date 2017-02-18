@@ -22,11 +22,11 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
 
 /**
   * Base class for built-in Sum aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class SumAggFunction[T: Numeric] extends AggregateFunction[T] {
-  /**
-    * The initial accumulator for Sum aggregate function
-    */
+  /** The initial accumulator for Sum aggregate function */
   class SumAccumulator[T] extends Accumulator {
     var sum: Option[T] = None
   }
@@ -109,9 +109,7 @@ class DoubleSumAggFunction extends SumAggFunction[Double]
   * Built-in Big Decimal Sum aggregate function
   */
 class DecimalSumAggFunction extends AggregateFunction[BigDecimal] {
-  /**
-    * The initial accumulator for Big Decimal Sum aggregate function
-    */
+  /** The initial accumulator for Big Decimal Sum aggregate function */
   class DecimalSumAccumulator extends Accumulator {
     var sum: BigDecimal = null
   }

@@ -22,11 +22,11 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
 
 /**
   * Base class for built-in Min aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class MinAggFunction[T](implicit ord: Ordering[T]) extends AggregateFunction[T] {
-  /**
-    * The initial accumulator for Min aggregate function
-    */
+  /** The initial accumulator for Min aggregate function */
   class MinAccumulator[T] extends Accumulator {
     var max: T = null.asInstanceOf[T]
   }

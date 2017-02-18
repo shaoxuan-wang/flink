@@ -20,6 +20,11 @@ package org.apache.flink.table.functions.builtInAggFuncs
 import java.math.BigDecimal
 import org.apache.flink.table.functions.AggregateFunction
 
+/**
+  * Test case for built-in average aggregate function
+  *
+  * @tparam T the type for the aggregation result
+  */
 abstract class AvgAggFunctionTestBase[T: Numeric] extends AggFunctionTestBase[T] {
 
   private val numeric: Numeric[T] = implicitly[Numeric[T]]

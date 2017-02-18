@@ -27,6 +27,8 @@ import org.junit.Assert.assertEquals
 
 /**
   * Base class for aggregate function test
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class AggFunctionTestBase[T] {
   private val offset = 2
