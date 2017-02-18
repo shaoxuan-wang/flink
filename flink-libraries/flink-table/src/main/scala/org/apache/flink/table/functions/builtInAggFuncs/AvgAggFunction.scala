@@ -22,11 +22,11 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
 
 /**
   * Base class for built-in Integral Avg aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class IntegralAvgAggFunction[T] extends AggregateFunction[T] {
-  /**
-    * The initial accumulator for Integral Avg aggregate function
-    */
+  /** The initial accumulator for Integral Avg aggregate function */
   class IntegralAvgAccumulator extends Accumulator {
     var sum: Long = 0
     var count: Long = 0
@@ -62,7 +62,13 @@ abstract class IntegralAvgAggFunction[T] extends AggregateFunction[T] {
     aAccum.sum += bAccum.sum
     a
   }
-
+  /**
+    * Convert the intermediate result to the expected aggregation result type
+    *
+    * @param value the intermediate result. We use a Long container to save
+    *         the intermediate result to avoid the overflow by sum operation.
+    * @return the result value with the expected aggregation result type
+    */
   def resultTypeConvert(value: Long): T
 }
 
@@ -89,11 +95,11 @@ class IntAvgAggFunction extends IntegralAvgAggFunction[Int] {
 
 /**
   * Base Class for Built-in Big Integral Avg aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class BigIntegralAvgAggFunction[T] extends AggregateFunction[T] {
-  /**
-    * The initial accumulator for Big Integral Avg aggregate function
-    */
+  /** The initial accumulator for Big Integral Avg aggregate function */
   class BigIntegralAvgAccumulator extends Accumulator {
     var sum: BigInteger = BigInteger.ZERO
     var count: Long = 0
@@ -130,6 +136,14 @@ abstract class BigIntegralAvgAggFunction[T] extends AggregateFunction[T] {
     a
   }
 
+  /**
+    * Convert the intermediate result to the expected aggregation result type
+    *
+    * @param value the intermediate result. We use a BigInteger container to
+    *         save the intermediate result to avoid the overflow by sum
+    *         operation.
+    * @return the result value with the expected aggregation result type
+    */
   def resultTypeConvert(value: BigInteger): T
 }
 
@@ -142,11 +156,11 @@ class LongAvgAggFunction extends BigIntegralAvgAggFunction[Long] {
 
 /**
   * Base class for built-in Floating Avg aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class FloatingAvgAggFunction[T] extends AggregateFunction[T] {
-  /**
-    * The initial accumulator for Floating Avg aggregate function
-    */
+  /** The initial accumulator for Floating Avg aggregate function */
   class FloatingAvgAccumulator extends Accumulator {
     var sum: Double = 0
     var count: Long = 0
@@ -183,6 +197,13 @@ abstract class FloatingAvgAggFunction[T] extends AggregateFunction[T] {
     a
   }
 
+  /**
+    * Convert the intermediate result to the expected aggregation result type
+    *
+    * @param value the intermediate result. We use a Double container to save
+    *         the intermediate result to avoid the overflow by sum operation.
+    * @return the result value with the expected aggregation result type
+    */
   def resultTypeConvert(value: Double): T
 }
 
@@ -204,9 +225,7 @@ class DoubleAvgAggFunction extends FloatingAvgAggFunction[Double] {
   * Base class for built-in Big Decimal Avg aggregate function
   */
 class DecimalAvgAggFunction extends AggregateFunction[BigDecimal] {
-  /**
-    * The initial accumulator for Big Decimal Avg aggregate function
-    */
+  /** The initial accumulator for Big Decimal Avg aggregate function */
   class DecimalAvgAccumulator extends Accumulator {
     var sum: BigDecimal = null
     var count: Long = 0

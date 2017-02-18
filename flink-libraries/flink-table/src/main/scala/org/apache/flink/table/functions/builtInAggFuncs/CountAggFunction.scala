@@ -23,9 +23,7 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
   * built-in count aggregate function
   */
 class CountAggFunction extends AggregateFunction[Long] {
-  /**
-    * The initial accumulator for count aggregate function
-    */
+  /** The initial accumulator for count aggregate function */
   class CountAccumulator extends Accumulator {
     var count: Long = 0
   }

@@ -18,11 +18,12 @@
 package org.apache.flink.table.functions.builtInAggFuncs
 
 import java.math.BigDecimal
-
 import org.apache.flink.table.functions.AggregateFunction
 
 /**
   * Test case for built-in max aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class MaxAggFunctionTest[T: Numeric] extends AggFunctionTestBase[T] {
 

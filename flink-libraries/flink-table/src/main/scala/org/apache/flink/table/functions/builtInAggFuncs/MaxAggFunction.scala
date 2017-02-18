@@ -22,11 +22,11 @@ import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
 
 /**
   * Base class for built-in Max aggregate function
+  *
+  * @tparam T the type for the aggregation result
   */
 abstract class MaxAggFunction[T](implicit ord: Ordering[T]) extends AggregateFunction[T] {
-  /**
-    * The initial accumulator for Max aggregate function
-    */
+  /** The initial accumulator for Max aggregate function */
   class MaxAccumulator[T] extends Accumulator {
     var max: T = null.asInstanceOf[T]
   }

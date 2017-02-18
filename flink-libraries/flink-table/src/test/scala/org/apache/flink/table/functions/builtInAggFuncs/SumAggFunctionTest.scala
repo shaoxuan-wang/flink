@@ -18,11 +18,14 @@
 
 package org.apache.flink.table.functions.builtInAggFuncs
 
-import org.apache.flink.table.functions.AggregateFunction
 import java.math.BigDecimal
+import org.apache.flink.table.functions.AggregateFunction
 
-import org.apache.flink.table.runtime.aggregate.{Aggregate, AggregateTestBase, DecimalSumAggregate}
-
+/**
+  * Test case for built-in sum aggregate function
+  *
+  * @tparam T the type for the aggregation result
+  */
 abstract class SumAggFunctionTestBase[T: Numeric] extends AggFunctionTestBase[T] {
 
   private val numeric: Numeric[T] = implicitly[Numeric[T]]

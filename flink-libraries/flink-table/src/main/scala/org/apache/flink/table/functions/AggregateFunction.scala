@@ -19,37 +19,55 @@ package org.apache.flink.table.functions
 
 /**
   * Base class for User-Defined Aggregates.
+  *
+  * @tparam T the type of the aggregation result
   */
 abstract class AggregateFunction[T] extends UserDefinedFunction {
   /**
     * Create and init the Accumulator for this [[AggregateFunction]].
+    *
+    * @return the accumulator with the initial value
     */
   def createAccumulator(): Accumulator
 
   /**
-    * Called at every time when a aggregation result should be materialized.
+    * Called every time when an aggregation result should be materialized.
     * The returned value could be either a speculative result (periodically
-    * emits as data arrive) or the final result of the aggregation (completely
-    * remove the state of the aggregation)
+    * emitted as data arrive) or the final result of the aggregation (when
+    * the state of the aggregation is completely removed).
+    *
+    * @param accumulator the accumulator which contains the current
+    *         aggregated results
+    * @return the aggregation result
     */
   def getValue(accumulator: Accumulator): T
 
   /**
     * Process the input values and update the provided accumulator instance.
+    *
+    * @param accumulator the accumulator which contains the current
+    *         aggregated results
+    * @param input the input value (usually obtained from a new arrived data)
     */
   def accumulate(accumulator: Accumulator, input: Any): Unit
 
   /**
     * Merge two accumulator instances into one accumulator instance.
+    *
+    * @param a one of the two accumulators
+    * @param b the other accumulator
+    * @return the resulting accumulator
     */
   def merge(a: Accumulator, b: Accumulator): Accumulator
 }
 
 /**
-  * Base interface for aggregate Accumulator.
-  * TODO: The accumulator and return types of the future proposed UDAGG
-  * functions can be dynamically provided by the users. But this needs the
-  * refactoring the AggregateFunction interface with code generation. We will
-  * remove this interface once codeGen for UDAGG is completed (FLINK-5813).
+  * Base class for aggregate Accumulator. The accumulator is used to keep the
+  * aggregated values which are needed to compute an aggregation result.
+  *
+  * TODO: We have the plan to have the accumulator and return types of
+  * functions dynamically provided by the users. This needs the refactoring
+  * of the AggregateFunction interface with the code generation. We will remove
+  * the [[Accumulator]] once codeGen for UDAGG is completed (FLINK-5813).
   */
 trait Accumulator
