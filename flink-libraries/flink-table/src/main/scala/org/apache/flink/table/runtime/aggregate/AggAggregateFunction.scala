@@ -12,7 +12,6 @@ class AggAggregateFunction(
   private val aggFields: Array[Int],
   private val groupKeys: Array[Int],
   private val aggregateMapping: Array[(Int, Int)],
-  private val groupings: Array[Int],
   private val aggregates: Array[Aggregate[_]],
   private val finalRowArity: Int,
   private val groupKeysMapping: Array[(Int, Int)],
@@ -21,14 +20,14 @@ class AggAggregateFunction(
 
   //Create the row for Accumulation, it is like the initialization of the first row
   override def createAccumulator(): Row = {
-    val row: Row = new Row(groupings.length + aggregates.length)
+    val row: Row = new Row(groupKeys.length + aggregates.length)
 //    aggregates.zipWithIndex.foreach{ case (agg, index) =>
 //      row.setField(groupings.length + index, agg)
 //      agg.init()
 //    }
 
     aggregates.zipWithIndex.foreach{ case (agg, index) =>
-      row.setField(groupings.length + index, agg.createAccumulator())
+      row.setField(groupKeys.length + index, agg.createAccumulator())
       //agg.init()
     }
     // Set group keys value to final output.
@@ -91,7 +90,7 @@ class AggAggregateFunction(
     aggregates.zipWithIndex.foreach{ case (agg, index) =>
       {
         val myAccum = accumulator.getField(index + groupKeys.length).asInstanceOf[Accumulator]
-        output.setField(groupings.length + index, agg.getResult(myAccum))
+        output.setField(groupKeys.length + index, agg.getResult(myAccum))
       }
     }
 

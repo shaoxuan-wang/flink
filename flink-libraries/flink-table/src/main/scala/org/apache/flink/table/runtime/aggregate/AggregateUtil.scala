@@ -540,7 +540,7 @@ object AggregateUtil {
 
     val foldPartialReturnType = createAggregatePartialDataType(inputType, groupings, aggregates)
     val foldFunction = new AggAggregateFunction(aggFieldIndexes, groupings,
-                                           aggOffsetMapping, groupings, aggregates,
+                                           aggOffsetMapping, aggregates,
                                                 finalRowArity, groupingOffsetMapping,
                                                 foldPartialReturnType)
 
