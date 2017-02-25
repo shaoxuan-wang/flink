@@ -119,110 +119,47 @@ class DataStreamAggregate(
       s"select: ($aggString)"
     val nonKeyedAggOpName = s"window: ($window), select: ($aggString)"
 
-    val mapFunction = AggregateUtil.createPrepareMapFunction(
-      namedAggregates,
-      grouping,
-      inputType)
+    // grouped / keyed aggregation
+    if (groupingKeys.length > 0) {
+      val windowFunction = AggregateUtil.createWindowIncrementalAggregationFunction(
+        window,
+        rowRelDataType.getFieldCount,
+        namedProperties)
 
-    val mappedInput = inputDS.map(mapFunction).name(prepareOpName)
+      val keyedStream = inputDS.keyBy(groupingKeys: _*)
+      val windowedStream =
+        createKeyedWindowedStream(window, keyedStream)
+        .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
 
+      val (aggFunction, accumulatorType) =
+        AggregateUtil.createAggregateFunction(
+          namedAggregates, inputType, rowRelDataType, grouping)
 
-    // check whether all aggregates support partial aggregate
-    if (AggregateUtil.doAllSupportPartialAggregation(
-          namedAggregates.map(_.getKey),
-          inputType,
-          grouping.length)) {
-      // do Incremental Aggregation
-      val reduceFunction = AggregateUtil.createIncrementalAggregateReduceFunction(
-        namedAggregates,
-        inputType,
-        getRowType,
-        grouping)
-      // grouped / keyed aggregation
-      if (groupingKeys.length > 0) {
-        val windowFunction = AggregateUtil.createWindowIncrementalAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
-
-        val keyedStream = mappedInput.keyBy(groupingKeys: _*)
-        val windowedStream =
-          createKeyedWindowedStream(window, keyedStream)
-          .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
-
-        windowedStream
-        .reduce(reduceFunction, windowFunction)
-        .returns(rowTypeInfo)
-        .name(keyedAggOpName)
-      }
-      // global / non-keyed aggregation
-      else {
-        val windowFunction = AggregateUtil.createAllWindowIncrementalAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
-
-        val windowedStream =
-          createNonKeyedWindowedStream(window, mappedInput)
-          .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
-
-        windowedStream
-        .reduce(reduceFunction, windowFunction)
-        .returns(rowTypeInfo)
-        .name(nonKeyedAggOpName)
-      }
+      windowedStream
+      .aggregate(aggFunction, windowFunction, accumulatorType, rowTypeInfo, rowTypeInfo)
+      .name(keyedAggOpName)
     }
+    // global / non-keyed aggregation
     else {
-      // do non-Incremental Aggregation
-      // grouped / keyed aggregation
-      if (groupingKeys.length > 0) {
+      val windowFunction = AggregateUtil.createAllWindowIncrementalAggregationFunction(
+        window,
+        rowRelDataType.getFieldCount,
+        namedProperties)
 
-        val windowFunction = AggregateUtil.createWindowAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
+      val windowedStream =
+        createNonKeyedWindowedStream(window, inputDS)
+        .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
 
-        val keyedStream = mappedInput.keyBy(groupingKeys: _*)
-        val windowedStream =
-          createKeyedWindowedStream(window, keyedStream)
-          .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
+      val (aggFunction, accumulatorType) =
+        AggregateUtil.createAggregateFunction(namedAggregates, inputType, rowRelDataType, grouping)
 
-        windowedStream
-        .apply(windowFunction)
-        .returns(rowTypeInfo)
-        .name(keyedAggOpName)
-      }
-      // global / non-keyed aggregation
-      else {
-        val windowFunction = AggregateUtil.createAllWindowAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
-
-        val windowedStream =
-          createNonKeyedWindowedStream(window, mappedInput)
-          .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
-
-        windowedStream
-        .apply(windowFunction)
-        .returns(rowTypeInfo)
-        .name(nonKeyedAggOpName)
-      }
+      windowedStream
+      .aggregate(aggFunction, windowFunction, accumulatorType, rowTypeInfo, rowTypeInfo)
+      .name(keyedAggOpName)
     }
   }
 }
+
 object DataStreamAggregate {
 
 
