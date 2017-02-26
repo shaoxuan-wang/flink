@@ -123,13 +123,17 @@ object AggregateUtil {
       isParserCaseSensitive: Boolean)
     : MapFunction[Row, Row] = {
 
-    val (aggFieldIndexes, aggregates) = transformToAggregateFunctions(
+    val (aggFieldIndexes, aggregates) = transformToAggFunctions(
       namedAggregates.map(_.getKey),
       inputType,
       groupings.length)
 
     val mapReturnType: RowTypeInfo =
-      createAggregateBufferDataType(groupings, aggregates, inputType, Some(Array(Types.LONG)))
+      createDataSetAggregateBufferDataType(
+        groupings,
+        aggregates,
+        inputType,
+        Some(Array(Types.LONG)))
 
     val (timeFieldPos, tumbleTimeWindowSize) = window match {
       case EventTimeTumblingGroupWindow(_, time, size) =>
@@ -145,7 +149,7 @@ object AggregateUtil {
         throw new UnsupportedOperationException(s"$window is currently not supported on batch")
     }
 
-    new DataSetWindowAggregateMapFunction(
+    new NewDataSetWindowAggregateMapFunction(
       aggregates,
       aggFieldIndexes,
       groupings,
@@ -172,13 +176,10 @@ object AggregateUtil {
       isInputCombined: Boolean = false)
     : RichGroupReduceFunction[Row, Row] = {
 
-    val aggregates = transformToAggregateFunctions(
+    val aggregates = transformToAggFunctions(
       namedAggregates.map(_.getKey),
       inputType,
       groupings.length)._2
-
-    val intermediateRowArity = groupings.length +
-      aggregates.map(_.intermediateDataType.length).sum
 
     // the mapping relation between field index of intermediate aggregate Row and output Row.
     val groupingOffsetMapping = getGroupKeysMapping(inputType, outputType, groupings)
@@ -198,30 +199,26 @@ object AggregateUtil {
       case EventTimeTumblingGroupWindow(_, _, size) if isTimeInterval(size.resultType) =>
         // tumbling time window
         val (startPos, endPos) = computeWindowStartEndPropertyPos(properties)
-        if (aggregates.forall(_.supportPartial)) {
+        if (true) {
           // for incremental aggregations
           new DataSetTumbleTimeWindowAggReduceCombineFunction(
-            intermediateRowArity,
             asLong(size),
             startPos,
             endPos,
             aggregates,
             groupingOffsetMapping,
             aggOffsetMapping,
-            intermediateRowArity + 1, // the additional field is used to store the time attribute
             outputType.getFieldCount)
         }
         else {
           // for non-incremental aggregations
           new DataSetTumbleTimeWindowAggReduceGroupFunction(
-            intermediateRowArity,
             asLong(size),
             startPos,
             endPos,
             aggregates,
             groupingOffsetMapping,
             aggOffsetMapping,
-            intermediateRowArity + 1, // the additional field is used to store the time attribute
             outputType.getFieldCount)
         }
       case EventTimeTumblingGroupWindow(_, _, size) =>
@@ -231,7 +228,6 @@ object AggregateUtil {
           aggregates,
           groupingOffsetMapping,
           aggOffsetMapping,
-          intermediateRowArity + 1,// the additional field is used to store the time attribute
           outputType.getFieldCount)
 
       case EventTimeSessionGroupWindow(_, _, gap) =>
@@ -240,8 +236,6 @@ object AggregateUtil {
           aggregates,
           groupingOffsetMapping,
           aggOffsetMapping,
-          // the additional two fields are used to store window-start and window-end attributes
-          intermediateRowArity + 2,
           outputType.getFieldCount,
           startPos,
           endPos,
@@ -280,18 +274,15 @@ object AggregateUtil {
       groupings: Array[Int])
     : RichGroupCombineFunction[Row,Row] = {
 
-    val aggregates = transformToAggregateFunctions(
+    val aggregates = transformToAggFunctions(
       namedAggregates.map(_.getKey),
       inputType,
       groupings.length)._2
 
-    val intermediateRowArity = groupings.length +
-      aggregates.map(_.intermediateDataType.length).sum
-
     window match {
       case EventTimeSessionGroupWindow(_, _, gap) =>
         val combineReturnType: RowTypeInfo =
-          createAggregateBufferDataType(
+          createDataSetAggregateBufferDataType(
             groupings,
             aggregates,
             inputType,
@@ -300,8 +291,6 @@ object AggregateUtil {
         new DataSetSessionWindowAggregateCombineGroupFunction(
           aggregates,
           groupings,
-          // the addition two fields are used to store window-start and window-end attributes
-          intermediateRowArity + 2,
           asLong(gap),
           combineReturnType)
       case _ =>
@@ -957,6 +946,32 @@ object AggregateUtil {
 
     val partialType = new RowTypeInfo(allFieldTypes: _*)
     partialType
+  }
+
+  private def createDataSetAggregateBufferDataType(
+      groupings: Array[Int],
+      aggregates: Array[TableAggregateFunction[_]],
+      inputType: RelDataType,
+      windowKeyTypes: Option[Array[TypeInformation[_]]] = None): RowTypeInfo = {
+
+    // get the field data types of group keys.
+    val groupingTypes: Seq[TypeInformation[_]] =
+      groupings
+      .map(inputType.getFieldList.get(_).getType)
+      .map(FlinkTypeFactory.toTypeInfo)
+
+    // get all field data types of all intermediate aggregates
+    val aggTypes: Seq[TypeInformation[_]] = aggregates.map { agg =>
+      val clazz: Class[_] = agg.getClass
+      TypeInformation.of(clazz)
+    }
+
+    // concat group key types, aggregation types, and window key types
+    val allFieldTypes: Seq[TypeInformation[_]] = windowKeyTypes match {
+      case None => groupingTypes ++: aggTypes
+      case _ => groupingTypes ++: aggTypes ++: windowKeyTypes.get
+    }
+    new RowTypeInfo(allFieldTypes: _*)
   }
 }
 

@@ -31,9 +31,9 @@ class AggregateMapFunction[IN, OUT](
     @transient private val returnType: TypeInformation[OUT])
   extends RichMapFunction[IN, OUT]
   with ResultTypeQueryable[OUT] {
-  
+
   private var output: Row = _
-  
+
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
     Preconditions.checkNotNull(aggFields)
@@ -44,7 +44,7 @@ class AggregateMapFunction[IN, OUT](
   }
 
   override def map(value: IN): OUT = {
-    
+
     val input = value.asInstanceOf[Row]
     for (i <- aggregates.indices) {
       val fieldValue = input.getField(aggFields(i))

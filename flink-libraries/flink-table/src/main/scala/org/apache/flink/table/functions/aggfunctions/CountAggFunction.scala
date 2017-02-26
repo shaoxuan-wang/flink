@@ -38,7 +38,10 @@ class CountAggFunction extends AggregateFunction[Long] {
   }
 
   override def getValue(accumulator: Accumulator): Long = {
-    accumulator.asInstanceOf[CountAccumulator].f0
+    if (accumulator == null.asInstanceOf[Accumulator])
+      accumulator.asInstanceOf[CountAccumulator].f0
+    else
+      accumulator.asInstanceOf[CountAccumulator].f0
   }
 
   override def merge(accumulators: JList[Accumulator]): Accumulator = {
