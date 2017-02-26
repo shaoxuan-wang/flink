@@ -218,7 +218,7 @@ class DataSetWindowAggregate(
       val rowTimeFieldPos = mapReturnType.getArity - 1
 
       // do incremental aggregation
-      if (doAllSupportPartialAggregation(
+      if (doAllSupportPartialMerge(
         namedAggregates.map(_.getKey),
         inputType,
         grouping.length)) {

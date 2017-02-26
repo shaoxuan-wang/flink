@@ -39,6 +39,7 @@ import org.apache.flink.streaming.api.windowing.windows.{Window => DataStreamWin
 import org.apache.flink.table.api.{TableException, Types}
 import org.apache.flink.table.functions.aggfunctions._
 import org.apache.flink.table.functions.{AggregateFunction => TableAggregateFunction}
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
 import org.apache.flink.table.typeutils.{RowIntervalTypeInfo, TimeIntervalTypeInfo}
 import org.apache.flink.types.Row
 
@@ -437,16 +438,23 @@ object AggregateUtil {
   }
 
   /**
-    * Return true if all aggregates can be partially computed. False otherwise.
+    * Return true if all aggregates can be partially merged. False otherwise.
     */
-  private[flink] def doAllSupportPartialAggregation(
-    aggregateCalls: Seq[AggregateCall],
-    inputType: RelDataType,
-    groupKeysCount: Int): Boolean = {
-    transformToAggregateFunctions(
+  private[flink] def doAllSupportPartialMerge(
+      aggregateCalls: Seq[AggregateCall],
+      inputType: RelDataType,
+      groupKeysCount: Int): Boolean = {
+    val aggregateList = transformToAggFunctions(
       aggregateCalls,
       inputType,
-      groupKeysCount)._2.forall(_.supportPartial)
+      groupKeysCount)._2
+    var ret: Boolean = true
+    var i: Int = 0
+    while (i < aggregateList.length && ret) {
+      ret = ifMethodExitInFunction("merge", aggregateList(i))
+      i += 1
+    }
+    ret
   }
 
   /**

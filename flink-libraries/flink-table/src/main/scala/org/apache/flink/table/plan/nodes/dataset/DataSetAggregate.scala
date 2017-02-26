@@ -91,10 +91,10 @@ class DataSetAggregate(
 
     val groupingKeys = grouping.indices.toArray
 
-    val mapFunction = AggregateUtil.createPrepareMapFunction(
-      namedAggregates,
-      grouping,
-      inputType)
+//    val mapFunction = AggregateUtil.createPrepareMapFunction(
+//      namedAggregates,
+//      grouping,
+//      inputType)
 
     val groupReduceFunction = AggregateUtil.createAggregateGroupReduceFunction(
       namedAggregates,
@@ -106,10 +106,10 @@ class DataSetAggregate(
     val inputDS = getInput.asInstanceOf[DataSetRel].translateToPlan(tableEnv)
 
     val aggString = aggregationToString(inputType, grouping, getRowType, namedAggregates, Nil)
-    val prepareOpName = s"prepare select: ($aggString)"
-    val mappedInput = inputDS
-      .map(mapFunction)
-      .name(prepareOpName)
+//    val prepareOpName = s"prepare select: ($aggString)"
+//    val mappedInput = inputDS
+//      .map(mapFunction)
+//      .name(prepareOpName)
 
     val rowTypeInfo = FlinkTypeFactory.toInternalRowTypeInfo(getRowType).asInstanceOf[RowTypeInfo]
 
@@ -118,7 +118,7 @@ class DataSetAggregate(
       val aggOpName = s"groupBy: (${groupingToString(inputType, grouping)}), " +
         s"select: ($aggString)"
 
-      mappedInput.asInstanceOf[DataSet[Row]]
+      inputDS.asInstanceOf[DataSet[Row]]
         .groupBy(groupingKeys: _*)
         .reduceGroup(groupReduceFunction)
         .returns(rowTypeInfo)
@@ -127,7 +127,7 @@ class DataSetAggregate(
     else {
       // global aggregation
       val aggOpName = s"select:($aggString)"
-      mappedInput.asInstanceOf[DataSet[Row]]
+      inputDS.asInstanceOf[DataSet[Row]]
         .reduceGroup(groupReduceFunction)
         .returns(rowTypeInfo)
         .name(aggOpName)
