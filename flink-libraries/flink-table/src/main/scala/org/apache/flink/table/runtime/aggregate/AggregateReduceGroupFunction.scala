@@ -21,29 +21,33 @@ import java.lang.Iterable
 
 import org.apache.flink.api.common.functions.RichGroupReduceFunction
 import org.apache.flink.configuration.Configuration
+import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
 
-import scala.collection.JavaConversions._
-
 /**
- * It wraps the aggregate logic inside of
- * [[org.apache.flink.api.java.operators.GroupReduceOperator]].
- *
- * @param aggregates          The aggregate functions.
- * @param groupKeysMapping    The index mapping of group keys between intermediate aggregate Row
- *                            and output Row.
- * @param aggregateMapping    The index mapping between aggregate function list and aggregated value
- *                            index in output Row.
- * @param groupingSetsMapping The index mapping of keys in grouping sets between intermediate
- *                            Row and output Row.
- */
+  * It wraps the aggregate logic inside of
+  * [[org.apache.flink.api.java.operators.GroupReduceOperator]].
+  *
+  * @param aggregates          The aggregate functions.
+  * @param aggFieldsIndex      the position (in the input Row) of the input value for each
+  *                            aggregate
+  * @param groupKeysMapping    The index mapping of group keys between intermediate aggregate Row
+  *                            and output Row.
+  * @param aggregateMapping    The index mapping between aggregate function list and aggregated
+  *                            value
+  *                            index in output Row.
+  * @param groupingSetsMapping The index mapping of keys in grouping sets between intermediate
+  *                            Row and output Row.
+  * @param finalRowArity       the arity of the final resulting row
+  */
 class AggregateReduceGroupFunction(
-    private val aggregates: Array[Aggregate[_ <: Any]],
+    private val aggregates: Array[AggregateFunction[_ <: Any]],
+    private val aggFieldsIndex: Array[Int],
+    private val groupingKeys: Array[Int],
     private val groupKeysMapping: Array[(Int, Int)],
     private val aggregateMapping: Array[(Int, Int)],
     private val groupingSetsMapping: Array[(Int, Int)],
-    private val intermediateRowArity: Int,
     private val finalRowArity: Int)
   extends RichGroupReduceFunction[Row, Row] {
 
@@ -54,7 +58,7 @@ class AggregateReduceGroupFunction(
   override def open(config: Configuration) {
     Preconditions.checkNotNull(aggregates)
     Preconditions.checkNotNull(groupKeysMapping)
-    aggregateBuffer = new Row(intermediateRowArity)
+    aggregateBuffer = new Row(aggregates.length)
     output = new Row(finalRowArity)
     if (!groupingSetsMapping.isEmpty) {
       intermediateGroupKeys = Some(groupKeysMapping.map(_._1))
@@ -72,26 +76,38 @@ class AggregateReduceGroupFunction(
    */
   override def reduce(records: Iterable[Row], out: Collector[Row]): Unit = {
 
-    // Initiate intermediate aggregate value.
-    aggregates.foreach(_.initiate(aggregateBuffer))
+    // initiate intermediate aggregate value.
+    for (i <- aggregates.indices) {
+      val agg = aggregates(i)
+      val accumulator = agg.createAccumulator()
+      aggregateBuffer.setField(i, accumulator)
+    }
 
-    // Merge intermediate aggregate value to buffer.
+    // accumulate value to intermediate aggregate buffer.
     var last: Row = null
-    records.foreach((record) => {
-      aggregates.foreach(_.merge(record, aggregateBuffer))
+    val iterator = records.iterator()
+    while (iterator.hasNext) {
+      val record = iterator.next()
+      for (i <- aggregates.indices) {
+        val agg = aggregates(i)
+        val accumulator = aggregateBuffer.getField(i).asInstanceOf[Accumulator]
+        agg.accumulate(accumulator, record.getField(aggFieldsIndex(i)))
+      }
       last = record
-    })
+    }
 
     // Set group keys value to final output.
     groupKeysMapping.foreach {
       case (after, previous) =>
-        output.setField(after, last.getField(previous))
+        output.setField(after, last.getField(groupingKeys(previous)))
     }
 
-    // Evaluate final aggregate value and set to output.
+    // get the final aggregate value and set it to output.
     aggregateMapping.foreach {
       case (after, previous) =>
-        output.setField(after, aggregates(previous).evaluate(aggregateBuffer))
+        val agg = aggregates(previous)
+        val accumulator = aggregateBuffer.getField(previous).asInstanceOf[Accumulator]
+        output.setField(after, agg.getValue(accumulator))
     }
 
     // Evaluate additional values of grouping sets

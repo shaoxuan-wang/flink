@@ -23,7 +23,8 @@ import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.{RelNode, RelWriter, SingleRel}
 import org.apache.flink.api.java.tuple.Tuple
-import org.apache.flink.streaming.api.datastream.{AllWindowedStream, DataStream, KeyedStream, WindowedStream}
+import org.apache.flink.streaming.api.datastream.{AllWindowedStream, DataStream, KeyedStream,
+WindowedStream}
 import org.apache.flink.streaming.api.windowing.assigners._
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.windows.{Window => DataStreamWindow}
@@ -89,9 +90,10 @@ class DataStreamAggregate(
 
   override def explainTerms(pw: RelWriter): RelWriter = {
     super.explainTerms(pw)
-      .itemIf("groupBy", groupingToString(inputType, grouping), !grouping.isEmpty)
-      .item("window", window)
-      .item("select", aggregationToString(
+    .itemIf("groupBy", groupingToString(inputType, grouping), !grouping.isEmpty)
+    .item("window", window)
+    .item(
+      "select", aggregationToString(
         inputType,
         grouping,
         getRowType,
@@ -131,12 +133,11 @@ class DataStreamAggregate(
         createKeyedWindowedStream(window, keyedStream)
         .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
 
-      val (aggFunction, accumulatorType) =
-        AggregateUtil.createAggregateFunction(
-          namedAggregates, inputType, rowRelDataType, grouping)
+      val (aggFunction, accumulatorRowType) =
+        AggregateUtil.createAggregateFunction(namedAggregates, inputType, rowRelDataType, grouping)
 
       windowedStream
-      .aggregate(aggFunction, windowFunction, accumulatorType, rowTypeInfo, rowTypeInfo)
+      .aggregate(aggFunction, windowFunction, accumulatorRowType, rowTypeInfo, rowTypeInfo)
       .name(keyedAggOpName)
     }
     // global / non-keyed aggregation
@@ -150,11 +151,11 @@ class DataStreamAggregate(
         createNonKeyedWindowedStream(window, inputDS)
         .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
 
-      val (aggFunction, accumulatorType) =
+      val (aggFunction, accumulatorRowType) =
         AggregateUtil.createAggregateFunction(namedAggregates, inputType, rowRelDataType, grouping)
 
       windowedStream
-      .aggregate(aggFunction, windowFunction, accumulatorType, rowTypeInfo, rowTypeInfo)
+      .aggregate(aggFunction, windowFunction, accumulatorRowType, rowTypeInfo, rowTypeInfo)
       .name(keyedAggOpName)
     }
   }
@@ -164,7 +165,7 @@ object DataStreamAggregate {
 
 
   private def createKeyedWindowedStream(groupWindow: LogicalWindow, stream: KeyedStream[Row, Tuple])
-    : WindowedStream[Row, Tuple, _ <: DataStreamWindow] = groupWindow match {
+  : WindowedStream[Row, Tuple, _ <: DataStreamWindow] = groupWindow match {
 
     case ProcessingTimeTumblingGroupWindow(_, size) if isTimeInterval(size.resultType) =>
       stream.window(TumblingProcessingTimeWindows.of(asTime(size)))
@@ -179,8 +180,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSlidingGroupWindow(_, size, slide) if isTimeInterval(size.resultType) =>
       stream.window(SlidingProcessingTimeWindows.of(asTime(size), asTime(slide)))
@@ -195,8 +197,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSessionGroupWindow(_, gap: Expression) =>
       stream.window(ProcessingTimeSessionWindows.withGap(asTime(gap)))
@@ -206,7 +209,7 @@ object DataStreamAggregate {
   }
 
   private def createNonKeyedWindowedStream(groupWindow: LogicalWindow, stream: DataStream[Row])
-    : AllWindowedStream[Row, _ <: DataStreamWindow] = groupWindow match {
+  : AllWindowedStream[Row, _ <: DataStreamWindow] = groupWindow match {
 
     case ProcessingTimeTumblingGroupWindow(_, size) if isTimeInterval(size.resultType) =>
       stream.windowAll(TumblingProcessingTimeWindows.of(asTime(size)))
@@ -221,8 +224,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSlidingGroupWindow(_, size, slide) if isTimeInterval(size.resultType) =>
       stream.windowAll(SlidingProcessingTimeWindows.of(asTime(size), asTime(slide)))
@@ -237,8 +241,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSessionGroupWindow(_, gap) =>
       stream.windowAll(ProcessingTimeSessionWindows.withGap(asTime(gap)))

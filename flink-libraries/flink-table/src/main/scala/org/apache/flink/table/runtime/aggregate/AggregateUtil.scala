@@ -53,48 +53,6 @@ object AggregateUtil {
 
   /**
     * Create a [[org.apache.flink.api.common.functions.MapFunction]] that prepares for aggregates.
-    * The function returns intermediate aggregate values of all aggregate function which are
-    * organized by the following format:
-    *
-    * {{{
-    *                   avg(x) aggOffsetInRow = 2          count(z) aggOffsetInRow = 5
-    *                             |                          |
-    *                             v                          v
-    *        +---------+---------+--------+--------+--------+--------+
-    *        |groupKey1|groupKey2|  sum1  | count1 |  sum2  | count2 |
-    *        +---------+---------+--------+--------+--------+--------+
-    *                                              ^
-    *                                              |
-    *                               sum(y) aggOffsetInRow = 4
-    * }}}
-    *
-    */
-  private[flink] def createPrepareMapFunction(
-      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
-      groupings: Array[Int],
-      inputType: RelDataType)
-    : MapFunction[Row, Row] = {
-
-    val (aggFieldIndexes,aggregates) = transformToAggregateFunctions(
-      namedAggregates.map(_.getKey),
-      inputType,
-      groupings.length)
-
-    val mapReturnType: RowTypeInfo =
-      createAggregateBufferDataType(groupings, aggregates, inputType)
-
-    val mapFunction = new AggregateMapFunction[Row, Row](
-      aggregates,
-      aggFieldIndexes,
-      groupings,
-      mapReturnType)
-
-    mapFunction
-  }
-
-
-  /**
-    * Create a [[org.apache.flink.api.common.functions.MapFunction]] that prepares for aggregates.
     * The output of the function contains the grouping keys and the timestamp and the intermediate
     * aggregate values of all aggregate function. The timestamp field is aligned to time window
     * start and used to be a grouping key in case of time window. In case of count window on
@@ -316,10 +274,10 @@ object AggregateUtil {
       inGroupingSet: Boolean)
     : RichGroupReduceFunction[Row, Row] = {
 
-    val aggregates = transformToAggregateFunctions(
+    val (aggFieldIndex, aggregates) = transformToAggFunctions(
       namedAggregates.map(_.getKey),
       inputType,
-      groupings.length)._2
+      groupings.length)
 
     val (groupingOffsetMapping, aggOffsetMapping) =
       getGroupingOffsetAndAggOffsetMapping(
@@ -334,28 +292,25 @@ object AggregateUtil {
       Array()
     }
 
-    val allPartialAggregate: Boolean = aggregates.forall(_.supportPartial)
-
-    val intermediateRowArity = groupings.length +
-      aggregates.map(_.intermediateDataType.length).sum
-
     val groupReduceFunction =
-      if (allPartialAggregate) {
+      if (doAllSupportPartialMerge(aggregates)) {
         new AggregateReduceCombineFunction(
           aggregates,
+          aggFieldIndex,
+          groupings,
           groupingOffsetMapping,
           aggOffsetMapping,
           groupingSetsMapping,
-          intermediateRowArity,
           outputType.getFieldCount)
       }
       else {
         new AggregateReduceGroupFunction(
           aggregates,
+          aggFieldIndex,
+          groupings,
           groupingOffsetMapping,
           aggOffsetMapping,
           groupingSetsMapping,
-          intermediateRowArity,
           outputType.getFieldCount)
       }
     groupReduceFunction
@@ -425,7 +380,7 @@ object AggregateUtil {
         "Could not find output field in input data type or aggregate functions.")
     }
 
-    val accumulatorType = createAccumulatorType(inputType, groupKeysIndex, aggregates)
+    val accumulatorRowType = createAccumulatorRowType(inputType, groupKeysIndex, aggregates)
     val aggFunction = new AggregateAggFunction(
       aggregates,
       aggFieldsIndex,
@@ -434,7 +389,7 @@ object AggregateUtil {
       groupKeysMapping,
       outputType.getFieldCount)
 
-    (aggFunction, accumulatorType)
+    (aggFunction, accumulatorRowType)
   }
 
   /**
@@ -444,10 +399,20 @@ object AggregateUtil {
       aggregateCalls: Seq[AggregateCall],
       inputType: RelDataType,
       groupKeysCount: Int): Boolean = {
+
     val aggregateList = transformToAggFunctions(
       aggregateCalls,
       inputType,
       groupKeysCount)._2
+
+    doAllSupportPartialMerge(aggregateList)
+  }
+
+  /**
+    * Return true if all aggregates can be partially merged. False otherwise.
+    */
+  private[flink] def doAllSupportPartialMerge(
+      aggregateList: Array[TableAggregateFunction[_ <: Any]]): Boolean = {
     var ret: Boolean = true
     var i: Int = 0
     while (i < aggregateList.length && ret) {
@@ -687,159 +652,54 @@ object AggregateUtil {
     (aggFieldIndexes, aggregates)
   }
 
-  private def transformToAggregateFunctions(
-    aggregateCalls: Seq[AggregateCall],
-    inputType: RelDataType,
-    groupKeysCount: Int): (Array[Int], Array[Aggregate[_ <: Any]]) = {
-
-    // store the aggregate fields of each aggregate function, by the same order of aggregates.
-    val aggFieldIndexes = new Array[Int](aggregateCalls.size)
-    val aggregates = new Array[Aggregate[_ <: Any]](aggregateCalls.size)
-
-    // set the start offset of aggregate buffer value to group keys' length,
-    // as all the group keys would be moved to the start fields of intermediate
-    // aggregate data.
-    var aggOffset = groupKeysCount
-
-    // create aggregate function instances by function type and aggregate field data type.
-    aggregateCalls.zipWithIndex.foreach { case (aggregateCall, index) =>
-      val argList: util.List[Integer] = aggregateCall.getArgList
-      if (argList.isEmpty) {
-        if (aggregateCall.getAggregation.isInstanceOf[SqlCountAggFunction]) {
-          aggFieldIndexes(index) = 0
-        } else {
-          throw new TableException("Aggregate fields should not be empty.")
-        }
-      } else {
-        if (argList.size() > 1) {
-          throw new TableException("Currently, do not support aggregate on multi fields.")
-        }
-        aggFieldIndexes(index) = argList.get(0)
-      }
-      val sqlTypeName = inputType.getFieldList.get(aggFieldIndexes(index)).getType.getSqlTypeName
-      aggregateCall.getAggregation match {
-        case _: SqlSumAggFunction | _: SqlSumEmptyIsZeroAggFunction => {
-          aggregates(index) = sqlTypeName match {
-            case TINYINT =>
-              new ByteSumAggregate
-            case SMALLINT =>
-              new ShortSumAggregate
-            case INTEGER =>
-              new IntSumAggregate
-            case BIGINT =>
-              new LongSumAggregate
-            case FLOAT =>
-              new FloatSumAggregate
-            case DOUBLE =>
-              new DoubleSumAggregate
-            case DECIMAL =>
-              new DecimalSumAggregate
-            case sqlType: SqlTypeName =>
-              throw new TableException("Sum aggregate does no support type:" + sqlType)
-          }
-        }
-        case _: SqlAvgAggFunction => {
-          aggregates(index) = sqlTypeName match {
-            case TINYINT =>
-               new ByteAvgAggregate
-            case SMALLINT =>
-              new ShortAvgAggregate
-            case INTEGER =>
-              new IntAvgAggregate
-            case BIGINT =>
-              new LongAvgAggregate
-            case FLOAT =>
-              new FloatAvgAggregate
-            case DOUBLE =>
-              new DoubleAvgAggregate
-            case DECIMAL =>
-              new DecimalAvgAggregate
-            case sqlType: SqlTypeName =>
-              throw new TableException("Avg aggregate does no support type:" + sqlType)
-          }
-        }
-        case sqlMinMaxFunction: SqlMinMaxAggFunction => {
-          aggregates(index) = if (sqlMinMaxFunction.getKind == SqlKind.MIN) {
-            sqlTypeName match {
-              case TINYINT =>
-                new ByteMinAggregate
-              case SMALLINT =>
-                new ShortMinAggregate
-              case INTEGER =>
-                new IntMinAggregate
-              case BIGINT =>
-                new LongMinAggregate
-              case FLOAT =>
-                new FloatMinAggregate
-              case DOUBLE =>
-                new DoubleMinAggregate
-              case DECIMAL =>
-                new DecimalMinAggregate
-              case BOOLEAN =>
-                new BooleanMinAggregate
-              case sqlType: SqlTypeName =>
-                throw new TableException("Min aggregate does no support type:" + sqlType)
-            }
-          } else {
-            sqlTypeName match {
-              case TINYINT =>
-                new ByteMaxAggregate
-              case SMALLINT =>
-                new ShortMaxAggregate
-              case INTEGER =>
-                new IntMaxAggregate
-              case BIGINT =>
-                new LongMaxAggregate
-              case FLOAT =>
-                new FloatMaxAggregate
-              case DOUBLE =>
-                new DoubleMaxAggregate
-              case DECIMAL =>
-                new DecimalMaxAggregate
-              case BOOLEAN =>
-                new BooleanMaxAggregate
-              case sqlType: SqlTypeName =>
-                throw new TableException("Max aggregate does no support type:" + sqlType)
-            }
-          }
-        }
-        case _: SqlCountAggFunction =>
-          aggregates(index) = new CountAggregate
-        case unSupported: SqlAggFunction =>
-          throw new TableException("unsupported Function: " + unSupported.getName)
-      }
-      setAggregateDataOffset(index)
-    }
-
-    // set the aggregate intermediate data start index in Row, and update current value.
-    def setAggregateDataOffset(index: Int): Unit = {
-      aggregates(index).setAggOffsetInRow(aggOffset)
-      aggOffset += aggregates(index).intermediateDataType.length
-    }
-
-    (aggFieldIndexes, aggregates)
-  }
-
-  private def createAggregateBufferDataType(
-    groupings: Array[Int],
-    aggregates: Array[Aggregate[_]],
-    inputType: RelDataType,
-    windowKeyTypes: Option[Array[TypeInformation[_]]] = None): RowTypeInfo = {
+  private def createDataSetAggregateBufferDataType(
+      groupings: Array[Int],
+      aggregates: Array[TableAggregateFunction[_]],
+      inputType: RelDataType,
+      windowKeyTypes: Option[Array[TypeInformation[_]]] = None): RowTypeInfo = {
 
     // get the field data types of group keys.
-    val groupingTypes: Seq[TypeInformation[_]] = groupings
+    val groupingTypes: Seq[TypeInformation[_]] =
+      groupings
       .map(inputType.getFieldList.get(_).getType)
       .map(FlinkTypeFactory.toTypeInfo)
 
     // get all field data types of all intermediate aggregates
-    val aggTypes: Seq[TypeInformation[_]] = aggregates.flatMap(_.intermediateDataType)
+    val aggTypes: Seq[TypeInformation[_]] = aggregates.map { agg =>
+      val clazz: Class[_] = agg.getClass
+      TypeInformation.of(clazz)
+    }
 
     // concat group key types, aggregation types, and window key types
-    val allFieldTypes:Seq[TypeInformation[_]] = windowKeyTypes match {
+    val allFieldTypes: Seq[TypeInformation[_]] = windowKeyTypes match {
       case None => groupingTypes ++: aggTypes
       case _ => groupingTypes ++: aggTypes ++: windowKeyTypes.get
     }
-    new RowTypeInfo(allFieldTypes :_*)
+    new RowTypeInfo(allFieldTypes: _*)
+  }
+
+  private def createAccumulatorRowType(
+      inputType: RelDataType,
+      groupings: Array[Int],
+      aggregates: Array[TableAggregateFunction[_]]): RowTypeInfo = {
+
+    // get the field data types of group keys.
+    val groupingTypes: Seq[TypeInformation[_]] =
+      groupings
+      .map(inputType.getFieldList.get(_).getType)
+      .map(FlinkTypeFactory.toTypeInfo)
+
+    val aggTypes: Seq[TypeInformation[_]] =
+      aggregates.map {
+        agg =>
+          val clazz: Class[_] = agg.getClass
+          TypeInformation.of(clazz)
+      }
+
+    val allFieldTypes = groupingTypes ++ aggTypes
+
+    val partialType = new RowTypeInfo(allFieldTypes: _*)
+    partialType
   }
 
   // Find the mapping between the index of aggregate list and aggregated value index in output Row.
@@ -930,56 +790,6 @@ object AggregateUtil {
     case Literal(value: Long, TimeIntervalTypeInfo.INTERVAL_MILLIS) => value
     case Literal(value: Long, RowIntervalTypeInfo.INTERVAL_ROWS) => value
     case _ => throw new IllegalArgumentException()
-  }
-
-  private def createAccumulatorType(
-      inputType: RelDataType,
-      groupings: Array[Int],
-      aggregates: Array[TableAggregateFunction[_]]): RowTypeInfo = {
-
-    // get the field data types of group keys.
-    val groupingTypes: Seq[TypeInformation[_]] =
-      groupings
-      .map(inputType.getFieldList.get(_).getType)
-      .map(FlinkTypeFactory.toTypeInfo)
-
-    val aggTypes: Seq[TypeInformation[_]] =
-      aggregates.map {
-        agg =>
-          val clazz: Class[_] = agg.getClass
-          TypeInformation.of(clazz)
-      }
-
-    val allFieldTypes = groupingTypes ++ aggTypes
-
-    val partialType = new RowTypeInfo(allFieldTypes: _*)
-    partialType
-  }
-
-  private def createDataSetAggregateBufferDataType(
-      groupings: Array[Int],
-      aggregates: Array[TableAggregateFunction[_]],
-      inputType: RelDataType,
-      windowKeyTypes: Option[Array[TypeInformation[_]]] = None): RowTypeInfo = {
-
-    // get the field data types of group keys.
-    val groupingTypes: Seq[TypeInformation[_]] =
-      groupings
-      .map(inputType.getFieldList.get(_).getType)
-      .map(FlinkTypeFactory.toTypeInfo)
-
-    // get all field data types of all intermediate aggregates
-    val aggTypes: Seq[TypeInformation[_]] = aggregates.map { agg =>
-      val clazz: Class[_] = agg.getClass
-      TypeInformation.of(clazz)
-    }
-
-    // concat group key types, aggregation types, and window key types
-    val allFieldTypes: Seq[TypeInformation[_]] = windowKeyTypes match {
-      case None => groupingTypes ++: aggTypes
-      case _ => groupingTypes ++: aggTypes ++: windowKeyTypes.get
-    }
-    new RowTypeInfo(allFieldTypes: _*)
   }
 }
 
