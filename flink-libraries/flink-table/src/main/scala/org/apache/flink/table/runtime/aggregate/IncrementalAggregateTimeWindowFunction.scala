@@ -28,24 +28,16 @@ import org.apache.flink.util.Collector
 /**
   * Computes the final aggregate value from incrementally computed aggreagtes.
   *
-  * @param aggregates   The aggregate functions.
-  * @param groupKeysMapping The index mapping of group keys between intermediate aggregate Row
-  *                         and output Row.
-  * @param aggregateMapping The index mapping between aggregate function list and aggregated value
-  *                         index in output Row.
   * @param finalRowArity  The arity of the final output row.
+  * @param windowStartPos the start position of window
+  * @param windowEndPos the end position of window
   */
 class IncrementalAggregateTimeWindowFunction(
-    private val aggregates: Array[Aggregate[_ <: Any]],
-    private val groupKeysMapping: Array[(Int, Int)],
-    private val aggregateMapping: Array[(Int, Int)],
     private val finalRowArity: Int,
     private val windowStartPos: Option[Int],
     private val windowEndPos: Option[Int])
   extends IncrementalAggregateWindowFunction[TimeWindow](
-    aggregates,
-    groupKeysMapping,
-    aggregateMapping, finalRowArity) {
+    finalRowArity) {
 
   private var collector: TimeWindowPropertyCollector = _
 

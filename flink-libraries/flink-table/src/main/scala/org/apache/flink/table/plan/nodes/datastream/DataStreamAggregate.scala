@@ -23,7 +23,8 @@ import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.{RelNode, RelWriter, SingleRel}
 import org.apache.flink.api.java.tuple.Tuple
-import org.apache.flink.streaming.api.datastream.{AllWindowedStream, DataStream, KeyedStream, WindowedStream}
+import org.apache.flink.streaming.api.datastream.{AllWindowedStream, DataStream, KeyedStream,
+WindowedStream}
 import org.apache.flink.streaming.api.windowing.assigners._
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.windows.{Window => DataStreamWindow}
@@ -89,9 +90,10 @@ class DataStreamAggregate(
 
   override def explainTerms(pw: RelWriter): RelWriter = {
     super.explainTerms(pw)
-      .itemIf("groupBy", groupingToString(inputType, grouping), !grouping.isEmpty)
-      .item("window", window)
-      .item("select", aggregationToString(
+    .itemIf("groupBy", groupingToString(inputType, grouping), !grouping.isEmpty)
+    .item("window", window)
+    .item(
+      "select", aggregationToString(
         inputType,
         grouping,
         getRowType,
@@ -119,115 +121,51 @@ class DataStreamAggregate(
       s"select: ($aggString)"
     val nonKeyedAggOpName = s"window: ($window), select: ($aggString)"
 
-    val mapFunction = AggregateUtil.createPrepareMapFunction(
-      namedAggregates,
-      grouping,
-      inputType)
+    // grouped / keyed aggregation
+    if (groupingKeys.length > 0) {
+      val windowFunction = AggregateUtil.createWindowIncrementalAggregationFunction(
+        window,
+        rowRelDataType.getFieldCount,
+        namedProperties)
 
-    val mappedInput = inputDS.map(mapFunction).name(prepareOpName)
+      val keyedStream = inputDS.keyBy(groupingKeys: _*)
+      val windowedStream =
+        createKeyedWindowedStream(window, keyedStream)
+        .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
 
+      val (aggFunction, accumulatorRowType) =
+        AggregateUtil.createAggregateFunction(namedAggregates, inputType, rowRelDataType, grouping)
 
-    // check whether all aggregates support partial aggregate
-    if (AggregateUtil.doAllSupportPartialAggregation(
-          namedAggregates.map(_.getKey),
-          inputType,
-          grouping.length)) {
-      // do Incremental Aggregation
-      val reduceFunction = AggregateUtil.createIncrementalAggregateReduceFunction(
-        namedAggregates,
-        inputType,
-        getRowType,
-        grouping)
-      // grouped / keyed aggregation
-      if (groupingKeys.length > 0) {
-        val windowFunction = AggregateUtil.createWindowIncrementalAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
-
-        val keyedStream = mappedInput.keyBy(groupingKeys: _*)
-        val windowedStream =
-          createKeyedWindowedStream(window, keyedStream)
-          .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
-
-        windowedStream
-        .reduce(reduceFunction, windowFunction)
-        .returns(rowTypeInfo)
-        .name(keyedAggOpName)
-      }
-      // global / non-keyed aggregation
-      else {
-        val windowFunction = AggregateUtil.createAllWindowIncrementalAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
-
-        val windowedStream =
-          createNonKeyedWindowedStream(window, mappedInput)
-          .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
-
-        windowedStream
-        .reduce(reduceFunction, windowFunction)
-        .returns(rowTypeInfo)
-        .name(nonKeyedAggOpName)
-      }
+      windowedStream
+      .aggregate(aggFunction, windowFunction, accumulatorRowType, rowTypeInfo, rowTypeInfo)
+      .name(keyedAggOpName)
     }
+    // global / non-keyed aggregation
     else {
-      // do non-Incremental Aggregation
-      // grouped / keyed aggregation
-      if (groupingKeys.length > 0) {
+      val windowFunction = AggregateUtil.createAllWindowIncrementalAggregationFunction(
+        window,
+        rowRelDataType.getFieldCount,
+        namedProperties)
 
-        val windowFunction = AggregateUtil.createWindowAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
+      val windowedStream =
+        createNonKeyedWindowedStream(window, inputDS)
+        .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
 
-        val keyedStream = mappedInput.keyBy(groupingKeys: _*)
-        val windowedStream =
-          createKeyedWindowedStream(window, keyedStream)
-          .asInstanceOf[WindowedStream[Row, Tuple, DataStreamWindow]]
+      val (aggFunction, accumulatorRowType) =
+        AggregateUtil.createAggregateFunction(namedAggregates, inputType, rowRelDataType, grouping)
 
-        windowedStream
-        .apply(windowFunction)
-        .returns(rowTypeInfo)
-        .name(keyedAggOpName)
-      }
-      // global / non-keyed aggregation
-      else {
-        val windowFunction = AggregateUtil.createAllWindowAggregationFunction(
-          window,
-          namedAggregates,
-          inputType,
-          rowRelDataType,
-          grouping,
-          namedProperties)
-
-        val windowedStream =
-          createNonKeyedWindowedStream(window, mappedInput)
-          .asInstanceOf[AllWindowedStream[Row, DataStreamWindow]]
-
-        windowedStream
-        .apply(windowFunction)
-        .returns(rowTypeInfo)
-        .name(nonKeyedAggOpName)
-      }
+      windowedStream
+      .aggregate(aggFunction, windowFunction, accumulatorRowType, rowTypeInfo, rowTypeInfo)
+      .name(keyedAggOpName)
     }
   }
 }
+
 object DataStreamAggregate {
 
 
   private def createKeyedWindowedStream(groupWindow: LogicalWindow, stream: KeyedStream[Row, Tuple])
-    : WindowedStream[Row, Tuple, _ <: DataStreamWindow] = groupWindow match {
+  : WindowedStream[Row, Tuple, _ <: DataStreamWindow] = groupWindow match {
 
     case ProcessingTimeTumblingGroupWindow(_, size) if isTimeInterval(size.resultType) =>
       stream.window(TumblingProcessingTimeWindows.of(asTime(size)))
@@ -242,8 +180,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSlidingGroupWindow(_, size, slide) if isTimeInterval(size.resultType) =>
       stream.window(SlidingProcessingTimeWindows.of(asTime(size), asTime(slide)))
@@ -258,8 +197,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSessionGroupWindow(_, gap: Expression) =>
       stream.window(ProcessingTimeSessionWindows.withGap(asTime(gap)))
@@ -269,7 +209,7 @@ object DataStreamAggregate {
   }
 
   private def createNonKeyedWindowedStream(groupWindow: LogicalWindow, stream: DataStream[Row])
-    : AllWindowedStream[Row, _ <: DataStreamWindow] = groupWindow match {
+  : AllWindowedStream[Row, _ <: DataStreamWindow] = groupWindow match {
 
     case ProcessingTimeTumblingGroupWindow(_, size) if isTimeInterval(size.resultType) =>
       stream.windowAll(TumblingProcessingTimeWindows.of(asTime(size)))
@@ -284,8 +224,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSlidingGroupWindow(_, size, slide) if isTimeInterval(size.resultType) =>
       stream.windowAll(SlidingProcessingTimeWindows.of(asTime(size), asTime(slide)))
@@ -300,8 +241,9 @@ object DataStreamAggregate {
       // TODO: EventTimeTumblingGroupWindow should sort the stream on event time
       // before applying the  windowing logic. Otherwise, this would be the same as a
       // ProcessingTimeTumblingGroupWindow
-      throw new UnsupportedOperationException("Event-time grouping windows on row intervals are " +
-        "currently not supported.")
+      throw new UnsupportedOperationException(
+        "Event-time grouping windows on row intervals are " +
+          "currently not supported.")
 
     case ProcessingTimeSessionGroupWindow(_, gap) =>
       stream.windowAll(ProcessingTimeSessionWindows.withGap(asTime(gap)))

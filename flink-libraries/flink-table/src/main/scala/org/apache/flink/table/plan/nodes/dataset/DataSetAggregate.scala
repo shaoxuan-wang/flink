@@ -87,15 +87,6 @@ class DataSetAggregate(
 
   override def translateToPlan(tableEnv: BatchTableEnvironment): DataSet[Row] = {
 
-    val config = tableEnv.getConfig
-
-    val groupingKeys = grouping.indices.toArray
-
-    val mapFunction = AggregateUtil.createPrepareMapFunction(
-      namedAggregates,
-      grouping,
-      inputType)
-
     val groupReduceFunction = AggregateUtil.createAggregateGroupReduceFunction(
       namedAggregates,
       inputType,
@@ -106,20 +97,16 @@ class DataSetAggregate(
     val inputDS = getInput.asInstanceOf[DataSetRel].translateToPlan(tableEnv)
 
     val aggString = aggregationToString(inputType, grouping, getRowType, namedAggregates, Nil)
-    val prepareOpName = s"prepare select: ($aggString)"
-    val mappedInput = inputDS
-      .map(mapFunction)
-      .name(prepareOpName)
 
     val rowTypeInfo = FlinkTypeFactory.toInternalRowTypeInfo(getRowType).asInstanceOf[RowTypeInfo]
 
-    if (groupingKeys.length > 0) {
+    if (grouping.length > 0) {
       // grouped aggregation
       val aggOpName = s"groupBy: (${groupingToString(inputType, grouping)}), " +
         s"select: ($aggString)"
 
-      mappedInput.asInstanceOf[DataSet[Row]]
-        .groupBy(groupingKeys: _*)
+      inputDS.asInstanceOf[DataSet[Row]]
+        .groupBy(grouping: _*)
         .reduceGroup(groupReduceFunction)
         .returns(rowTypeInfo)
         .name(aggOpName)
@@ -127,7 +114,7 @@ class DataSetAggregate(
     else {
       // global aggregation
       val aggOpName = s"select:($aggString)"
-      mappedInput.asInstanceOf[DataSet[Row]]
+      inputDS.asInstanceOf[DataSet[Row]]
         .reduceGroup(groupReduceFunction)
         .returns(rowTypeInfo)
         .name(aggOpName)
