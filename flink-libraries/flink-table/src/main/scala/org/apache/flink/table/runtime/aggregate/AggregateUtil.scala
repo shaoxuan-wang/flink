@@ -691,7 +691,7 @@ object AggregateUtil {
     val aggTypes: Seq[TypeInformation[_]] =
       aggregates.map {
         agg =>
-          val accType = agg.getAcculatorType()
+          val accType = agg.getAccumulatorType()
           if (accType != null) {
             accType
           } else {
@@ -723,7 +723,7 @@ object AggregateUtil {
     val aggTypes: Seq[TypeInformation[_]] =
       aggregates.map {
         agg =>
-          val accType = agg.getAcculatorType()
+          val accType = agg.getAccumulatorType()
           if (accType != null) {
             accType
           } else {

@@ -66,12 +66,12 @@ abstract class AggregateFunction[T] extends UserDefinedFunction {
 
   /**
     * Returns the type of the accumulator.
-    * This function is optional and can be implemeted if the type cannot automatically inferred
+    * This function is optional and can be implemented if the type cannot automatically inferred
     * from the instance returned by [[createAccumulator()]].
     *
     * @return The type information for the accumulator.
     */
-  def getAcculatorType(): TypeInformation[_] = null
+  def getAccumulatorType(): TypeInformation[_] = null
 }
 
 /**

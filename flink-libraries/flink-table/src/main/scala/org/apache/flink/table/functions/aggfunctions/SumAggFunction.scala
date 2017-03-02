@@ -76,7 +76,7 @@ abstract class SumAggFunction[T: Numeric] extends AggregateFunction[T] {
     ret
   }
 
-  override def getAcculatorType(): TypeInformation[_] = {
+  override def getAccumulatorType(): TypeInformation[_] = {
     new TupleTypeInfo(getValueTypeInfo, BasicTypeInfo.BOOLEAN_TYPE_INFO)
   }
 
@@ -171,7 +171,7 @@ class DecimalSumAggFunction extends AggregateFunction[BigDecimal] {
     ret
   }
 
-  override def getAcculatorType() = {
+  override def getAccumulatorType() = {
     new TupleTypeInfo(BasicTypeInfo.BIG_DEC_TYPE_INFO, BasicTypeInfo.BOOLEAN_TYPE_INFO)
   }
 }
