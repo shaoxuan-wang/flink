@@ -691,14 +691,20 @@ object AggregateUtil {
     val aggTypes: Seq[TypeInformation[_]] =
       aggregates.map {
         agg =>
-          val accumulator = agg.createAccumulator()
-          try {
-            TypeInformation.of(accumulator.getClass)
-          } catch {
-            // When got exception (it could happen when the accumulator is defined with Template),
-            // we will try to provide a generic type for accumulator
-            case ex : InvalidTypesException =>
-              TypeInformation.of(new TypeHint[accumulator.type](){})
+          val accType = agg.getAcculatorType()
+          if (accType != null) {
+            accType
+          } else {
+            val accumulator = agg.createAccumulator()
+            try {
+              TypeInformation.of(accumulator.getClass)
+            } catch {
+              case ite: InvalidTypesException =>
+                throw new TableException(
+                  "Cannot infer type of accumulator. " +
+                    "You can override AggregateFunction.getAccumulatorType() to specify the type.",
+                  ite)
+            }
           }
       }
 
@@ -717,15 +723,21 @@ object AggregateUtil {
     val aggTypes: Seq[TypeInformation[_]] =
       aggregates.map {
         agg =>
-          val accumulator = agg.createAccumulator()
+          val accType = agg.getAcculatorType()
+          if (accType != null) {
+            accType
+          } else {
+            val accumulator = agg.createAccumulator()
             try {
               TypeInformation.of(accumulator.getClass)
             } catch {
-              // When got exception (it could happen when the accumulator is defined with Template),
-              // we will try to provide a generic type for accumulator
-              case ex : InvalidTypesException =>
-                TypeInformation.of(new TypeHint[accumulator.type](){})
+              case ite: InvalidTypesException =>
+                throw new TableException(
+                    "Cannot infer type of accumulator. " +
+                    "You can override AggregateFunction.getAccumulatorType() to specify the type.",
+                  ite)
             }
+          }
       }
 
     new RowTypeInfo(aggTypes: _*)
