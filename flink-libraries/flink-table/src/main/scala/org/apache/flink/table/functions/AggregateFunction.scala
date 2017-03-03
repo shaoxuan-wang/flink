@@ -35,6 +35,15 @@ abstract class AggregateFunction[T] extends UserDefinedFunction {
   def createAccumulator(): Accumulator
 
   /**
+    * Retract the input values from the accumulator instance.
+    *
+    * @param accumulator the accumulator which contains the current
+    *                    aggregated results
+    * @param input       the input value (usually obtained from a new arrived data)
+    */
+  def retract(accumulator: Accumulator, input: Any): Unit
+
+  /**
     * Called every time when an aggregation result should be materialized.
     * The returned value could be either an early and incomplete result
     * (periodically emitted as data arrive) or the final result of the
