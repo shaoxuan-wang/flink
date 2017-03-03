@@ -85,7 +85,7 @@ public class MultipleProgramsTestBase extends TestBaseUtils {
 		
 		switch(mode){
 			case CLUSTER:
-				TestEnvironment clusterEnv = new TestEnvironment(cluster, 4);
+				TestEnvironment clusterEnv = new TestEnvironment(cluster, 4, true);
 				clusterEnv.setAsContext();
 				break;
 			case COLLECTION:
