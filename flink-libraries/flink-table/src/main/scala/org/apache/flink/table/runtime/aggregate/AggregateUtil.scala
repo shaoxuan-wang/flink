@@ -38,6 +38,7 @@ import org.apache.flink.streaming.api.functions.windowing.{AllWindowFunction, Wi
 import org.apache.flink.streaming.api.windowing.windows.{Window => DataStreamWindow}
 import org.apache.flink.table.api.{TableException, Types}
 import org.apache.flink.table.functions.aggfunctions._
+import org.apache.flink.table.functions.utils.AggSqlFunction
 import org.apache.flink.table.functions.{AggregateFunction => TableAggregateFunction}
 import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
 import org.apache.flink.table.typeutils.{RowIntervalTypeInfo, TimeIntervalTypeInfo}
@@ -722,7 +723,10 @@ object AggregateUtil {
         }
         case _: SqlCountAggFunction =>
           aggregates(index) = new CountAggFunction
+        case udagg: AggSqlFunction =>
+          aggregates(index) = udagg.getFunction
         case unSupported: SqlAggFunction =>
+//          aggregates(index) = new CountAggFunction
           throw new TableException("unsupported Function: " + unSupported.getName)
       }
     }

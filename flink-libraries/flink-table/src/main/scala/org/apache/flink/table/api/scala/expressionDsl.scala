@@ -26,6 +26,8 @@ import org.apache.flink.table.expressions.TimeIntervalUnit.TimeIntervalUnit
 import org.apache.flink.table.expressions._
 import java.math.{BigDecimal => JBigDecimal}
 
+import org.apache.flink.table.functions.AggregateFunction
+
 import scala.language.implicitConversions
 
 /**
@@ -666,6 +668,9 @@ trait ImplicitExpressionConversions {
   implicit def sqlTimestamp2Literal(sqlTimestamp: Timestamp): Expression =
     Literal(sqlTimestamp)
   implicit def array2ArrayConstructor(array: Array[_]): Expression = convertArray(array)
+
+  implicit def UserDefinedAggFunctionConstructor[T: TypeInformation](udaf: AggregateFunction[T]):
+  UDAGGExpression[T] = UDAGGExpression(udaf)
 }
 
 // ------------------------------------------------------------------------------------------------

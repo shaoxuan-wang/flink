@@ -74,6 +74,21 @@ object TypeCoercion {
     case _ => false
   }
 
+
+  /**
+    * Test if we can do auto cast in an arithmetic operation.
+    */
+  def canAutoCast(from: TypeInformation[_], to: TypeInformation[_]): Boolean = (from, to) match {
+    case tuple if tuple.productIterator.forall(numericWideningPrecedence.contains) =>
+      if (numericWideningPrecedence.indexOf(from) < numericWideningPrecedence.indexOf(to)) {
+        true
+      } else {
+        false
+      }
+
+    case _ => false
+  }
+
   /**
     * All the supported cast types in flink-table.
     * Note: This may lose information during the cast.
