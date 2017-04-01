@@ -25,7 +25,7 @@ import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.java.typeutils.{ListTypeInfo, RowTypeInfo}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.ProcessFunction
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
 
@@ -72,6 +72,8 @@ class RowsClauseBoundedOverProcessFunction(
   // to this time stamp.
   private var dataState: MapState[Long, JList[Row]] = _
 
+  private var aggregatorHelper: AggregatorHelper = _
+
   override def open(config: Configuration) {
 
     output = new Row(forwardedFieldCount + aggregates.length)
@@ -100,6 +102,7 @@ class RowsClauseBoundedOverProcessFunction(
 
     dataState = getRuntimeContext.getMapState(mapStateDescriptor)
 
+    aggregatorHelper = new AggregatorHelper
   }
 
   override def processElement(
@@ -199,23 +202,35 @@ class RowsClauseBoundedOverProcessFunction(
 
         // retract old row from accumulators
         if (null != retractRow) {
-          i = 0
-          while (i < aggregates.length) {
-            val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-            aggregates(i).retract(accumulator, retractRow.getField(aggFields(i)(0)))
-            i += 1
-          }
+          aggregatorHelper.retract(
+            accumulators,
+            aggregates,
+            aggFields,
+            retractRow)
+//          i = 0
+//          while (i < aggregates.length) {
+//            val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//            aggregates(i).retract(accumulator, retractRow.getField(aggFields(i)(0)))
+//            i += 1
+//          }
         }
 
         // accumulate current row and set aggregate in output row
-        i = 0
-        while (i < aggregates.length) {
-          val index = forwardedFieldCount + i
-          val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-          aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-          output.setField(index, aggregates(i).getValue(accumulator))
-          i += 1
-        }
+        aggregatorHelper.accumulateAndSetOutput(
+          accumulators,
+          aggregates,
+          aggFields,
+          forwardedFieldCount,
+          input,
+          output)
+//        i = 0
+//        while (i < aggregates.length) {
+//          val index = forwardedFieldCount + i
+//          val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//          aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
+//          output.setField(index, aggregates(i).getValue(accumulator))
+//          i += 1
+//        }
         j += 1
 
         out.collect(output)

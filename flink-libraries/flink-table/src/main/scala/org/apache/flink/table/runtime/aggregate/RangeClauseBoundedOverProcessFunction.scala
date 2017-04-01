@@ -24,7 +24,7 @@ import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.java.typeutils.{ListTypeInfo, RowTypeInfo}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.ProcessFunction
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
 
@@ -68,6 +68,8 @@ class RangeClauseBoundedOverProcessFunction(
   // to this time stamp.
   private var dataState: MapState[Long, JList[Row]] = _
 
+  private var aggregatorHelper: AggregatorHelper = _
+
   override def open(config: Configuration) {
 
     output = new Row(forwardedFieldCount + aggregates.length)
@@ -92,6 +94,7 @@ class RangeClauseBoundedOverProcessFunction(
 
     dataState = getRuntimeContext.getMapState(mapStateDescriptor)
 
+    aggregatorHelper = new AggregatorHelper
   }
 
   override def processElement(
@@ -155,14 +158,19 @@ class RangeClauseBoundedOverProcessFunction(
           val retractDataList = dataState.get(dataTs)
           dataListIndex = 0
           while (dataListIndex < retractDataList.size()) {
-            aggregatesIndex = 0
-            while (aggregatesIndex < aggregates.length) {
-              val accumulator = accumulators.getField(aggregatesIndex).asInstanceOf[Accumulator]
-              aggregates(aggregatesIndex)
-                .retract(accumulator, retractDataList.get(dataListIndex)
-                .getField(aggFields(aggregatesIndex)(0)))
-              aggregatesIndex += 1
-            }
+            val retractRow = retractDataList.get(dataListIndex)
+            aggregatorHelper.retract(
+              accumulators,
+              aggregates,
+              aggFields,
+              retractRow)
+//            var i = 0
+//            while (i < aggregates.length) {
+//              val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//              aggregates(i).retract(accumulator, retractDataList.get(dataListIndex)
+//                .getField(aggFields(i)(0)))
+//              i += 1
+//            }
             dataListIndex += 1
           }
           retractTsList.add(dataTs)
@@ -172,25 +180,36 @@ class RangeClauseBoundedOverProcessFunction(
       // do accumulation
       dataListIndex = 0
       while (dataListIndex < inputs.size()) {
+        val curRow = inputs.get(dataListIndex)
         // accumulate current row
-        aggregatesIndex = 0
-        while (aggregatesIndex < aggregates.length) {
-          val accumulator = accumulators.getField(aggregatesIndex).asInstanceOf[Accumulator]
-          aggregates(aggregatesIndex).accumulate(accumulator, inputs.get(dataListIndex)
-            .getField(aggFields(aggregatesIndex)(0)))
-          aggregatesIndex += 1
-        }
+        aggregatorHelper.accumulate(
+          accumulators,
+          aggregates,
+          aggFields,
+          curRow)
+//        aggregatesIndex = 0
+//        while (aggregatesIndex < aggregates.length) {
+//          val accumulator = accumulators.getField(aggregatesIndex).asInstanceOf[Accumulator]
+//          aggregates(aggregatesIndex).accumulate(accumulator, inputs.get(dataListIndex)
+//            .getField(aggFields(aggregatesIndex)(0)))
+//          aggregatesIndex += 1
+//        }
         dataListIndex += 1
       }
 
       // set aggregate in output row
-      aggregatesIndex = 0
-      while (aggregatesIndex < aggregates.length) {
-        val index = forwardedFieldCount + aggregatesIndex
-        val accumulator = accumulators.getField(aggregatesIndex).asInstanceOf[Accumulator]
-        output.setField(index, aggregates(aggregatesIndex).getValue(accumulator))
-        aggregatesIndex += 1
-      }
+      aggregatorHelper.setOutput(
+        accumulators,
+        aggregates,
+        forwardedFieldCount,
+        output)
+//      aggregatesIndex = 0
+//      while (aggregatesIndex < aggregates.length) {
+//        val index = forwardedFieldCount + aggregatesIndex
+//        val accumulator = accumulators.getField(aggregatesIndex).asInstanceOf[Accumulator]
+//        output.setField(index, aggregates(aggregatesIndex).getValue(accumulator))
+//        aggregatesIndex += 1
+//      }
 
       // copy forwarded fields to output row and emit output row
       dataListIndex = 0

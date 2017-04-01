@@ -20,7 +20,7 @@ package org.apache.flink.table.runtime.aggregate
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.ProcessFunction
-import org.apache.flink.table.functions.{ Accumulator, AggregateFunction }
+import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{ Collector, Preconditions }
 import org.apache.flink.api.common.state.ValueState
@@ -60,6 +60,7 @@ class BoundedProcessingOverRangeProcessFunction(
   private var output: Row = _
   private var accumulatorState: ValueState[Row] = _
   private var rowMapState: MapState[Long, JList[Row]] = _
+  private var aggregatorHelper: AggregatorHelper = _
 
   override def open(config: Configuration) {
     output = new Row(forwardedFieldCount + aggregates.length)
@@ -75,6 +76,7 @@ class BoundedProcessingOverRangeProcessFunction(
     val stateDescriptor: ValueStateDescriptor[Row] =
       new ValueStateDescriptor[Row]("overState", rowTypeInfo)
     accumulatorState = getRuntimeContext.getState(stateDescriptor)
+    aggregatorHelper = new AggregatorHelper
   }
 
   override def processElement(
@@ -135,13 +137,19 @@ class BoundedProcessingOverRangeProcessFunction(
         val elementsRemove = rowMapState.get(elementKey)
         var iRemove = 0
         while (iRemove < elementsRemove.size()) {
-          i = 0
-          while (i < aggregates.length) {
-            val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-            aggregates(i).retract(accumulator, elementsRemove.get(iRemove)
-               .getField(aggFields(i)(0)))
-            i += 1
-          }
+          val retractRow = elementsRemove.get(iRemove)
+          aggregatorHelper.retract(
+            accumulators,
+            aggregates,
+            aggFields,
+            retractRow)
+//          i = 0
+//          while (i < aggregates.length) {
+//            val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//            aggregates(i).retract(accumulator, elementsRemove.get(iRemove)
+//               .getField(aggFields(i)(0)))
+//            i += 1
+//          }
           iRemove += 1
         }
         // mark element for later removal not to modify the iterator over MapState
@@ -162,12 +170,17 @@ class BoundedProcessingOverRangeProcessFunction(
     var iElemenets = 0
     while (iElemenets < currentElements.size()) {
       val input = currentElements.get(iElemenets)
-      i = 0
-      while (i < aggregates.length) {
-        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-        i += 1
-      }
+      aggregatorHelper.accumulate(
+        accumulators,
+        aggregates,
+        aggFields,
+        input)
+//      i = 0
+//      while (i < aggregates.length) {
+//        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//        aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
+//        i += 1
+//      }
       iElemenets += 1
     }
 
@@ -184,13 +197,18 @@ class BoundedProcessingOverRangeProcessFunction(
       }
 
       // add the accumulators values to result
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-        output.setField(index, aggregates(i).getValue(accumulator))
-        i += 1
-      }
+      aggregatorHelper.setOutput(
+        accumulators,
+        aggregates,
+        forwardedFieldCount,
+        output)
+//      i = 0
+//      while (i < aggregates.length) {
+//        val index = forwardedFieldCount + i
+//        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//        output.setField(index, aggregates(i).getValue(accumulator))
+//        i += 1
+//      }
       out.collect(output)
       iElemenets += 1
     }
