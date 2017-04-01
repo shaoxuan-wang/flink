@@ -54,6 +54,7 @@ class BoundedProcessingOverRowProcessFunction(
   private var output: Row = _
   private var counterState: ValueState[Long] = _
   private var smallestTsState: ValueState[Long] = _
+  private var aggregatorHelper: AggregatorHelper = _
 
   override def open(config: Configuration) {
 
@@ -81,6 +82,8 @@ class BoundedProcessingOverRowProcessFunction(
     val smallestTimestampDescriptor : ValueStateDescriptor[Long] =
        new ValueStateDescriptor[Long]("smallestTSState", classOf[Long])
     smallestTsState = getRuntimeContext.getState(smallestTimestampDescriptor)
+
+    aggregatorHelper = new AggregatorHelper
   }
 
   override def processElement(
@@ -115,13 +118,20 @@ class BoundedProcessingOverRowProcessFunction(
 
       // get oldest element beyond buffer size
       // and if oldest element exist, retract value
-      i = 0
-      while (i < aggregates.length) {
-        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).retract(accumulator, retractList.get(0).getField(aggFields(i)(0)))
-        i += 1
-      }
+      val retractRow = retractList.get(0)
+      aggregatorHelper.retract(
+        accumulators,
+        aggregates,
+        aggFields,
+        retractRow)
+//      i = 0
+//      while (i < aggregates.length) {
+//        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//        aggregates(i).retract(accumulator, retractRow.getField(aggFields(i)(0)))
+//        i += 1
+//      }
       retractList.remove(0)
+
       // if reference timestamp list not empty, keep the list
       if (!retractList.isEmpty) {
         rowMapState.put(smallestTs, retractList)
@@ -153,14 +163,21 @@ class BoundedProcessingOverRowProcessFunction(
     }
 
     // accumulate current row and set aggregate in output row
-    i = 0
-    while (i < aggregates.length) {
-      val index = forwardedFieldCount + i
-      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-      output.setField(index, aggregates(i).getValue(accumulator))
-      i += 1
-    }
+    aggregatorHelper.accumulateAndSetOutput(
+      accumulators,
+      aggregates,
+      aggFields,
+      forwardedFieldCount,
+      input,
+      output)
+//    i = 0
+//    while (i < aggregates.length) {
+//      val index = forwardedFieldCount + i
+//      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
+//      output.setField(index, aggregates(i).getValue(accumulator))
+//      i += 1
+//    }
 
     // update map state, accumulator state, counter and timestamp
     val currentTimeState = rowMapState.get(currentTime)

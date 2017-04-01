@@ -23,7 +23,7 @@ import org.apache.flink.configuration.Configuration
 import org.apache.flink.runtime.state.{FunctionInitializationContext, FunctionSnapshotContext}
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction
 import org.apache.flink.streaming.api.functions.ProcessFunction
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
 
@@ -49,6 +49,7 @@ class UnboundedNonPartitionedProcessingOverProcessFunction(
   private var accumulators: Row = _
   private var output: Row = _
   private var state: ListState[Row] = null
+  private var aggregatorHelper: AggregatorHelper = _
 
   override def open(config: Configuration) {
     output = new Row(forwardedFieldCount + aggregates.length)
@@ -65,6 +66,7 @@ class UnboundedNonPartitionedProcessingOverProcessFunction(
         }
       }
     }
+    aggregatorHelper = new AggregatorHelper
   }
 
   override def processElement(
@@ -78,14 +80,21 @@ class UnboundedNonPartitionedProcessingOverProcessFunction(
       i += 1
     }
 
-    i = 0
-    while (i < aggregates.length) {
-      val index = forwardedFieldCount + i
-      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-      output.setField(index, aggregates(i).getValue(accumulator))
-      i += 1
-    }
+    aggregatorHelper.accumulateAndSetOutput(
+      accumulators,
+      aggregates,
+      aggFields,
+      forwardedFieldCount,
+      input,
+      output)
+//    i = 0
+//    while (i < aggregates.length) {
+//      val index = forwardedFieldCount + i
+//      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
+//      output.setField(index, aggregates(i).getValue(accumulator))
+//      i += 1
+//    }
 
     out.collect(output)
   }

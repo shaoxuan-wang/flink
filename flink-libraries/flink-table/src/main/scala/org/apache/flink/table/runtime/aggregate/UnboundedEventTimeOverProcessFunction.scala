@@ -28,7 +28,7 @@ import org.apache.flink.util.{Collector, Preconditions}
 import org.apache.flink.api.common.state._
 import org.apache.flink.api.java.typeutils.ListTypeInfo
 import org.apache.flink.streaming.api.operators.TimestampedCollector
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.functions.AggregateFunction
 
 
 /**
@@ -60,6 +60,7 @@ abstract class UnboundedEventTimeOverProcessFunction(
   private var rowMapState: MapState[Long, JList[Row]] = _
   // list to sort timestamps to access rows in timestamp order
   private var sortedTimestamps: util.LinkedList[Long] = _
+  protected var aggregatorHelper: AggregatorHelper = _
 
 
   override def open(config: Configuration) {
@@ -77,6 +78,7 @@ abstract class UnboundedEventTimeOverProcessFunction(
       new MapStateDescriptor[Long, JList[Row]]("rowmapstate",
         BasicTypeInfo.LONG_TYPE_INFO.asInstanceOf[TypeInformation[Long]], rowListTypeInfo)
     rowMapState = getRuntimeContext.getMapState(mapStateDescriptor)
+    aggregatorHelper = new AggregatorHelper
   }
 
   /**
@@ -246,14 +248,21 @@ class UnboundedEventTimeRowsOverProcessFunction(
       }
 
       // update accumulators and copy aggregates to output row
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).accumulate(accumulator, curRow.getField(aggFields(i)(0)))
-        output.setField(index, aggregates(i).getValue(accumulator))
-        i += 1
-      }
+      aggregatorHelper.accumulateAndSetOutput(
+        lastAccumulator,
+        aggregates,
+        aggFields,
+        forwardedFieldCount,
+        curRow,
+        output)
+//      i = 0
+//      while (i < aggregates.length) {
+//        val index = forwardedFieldCount + i
+//        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
+//        aggregates(i).accumulate(accumulator, curRow.getField(aggFields(i)(0)))
+//        output.setField(index, aggregates(i).getValue(accumulator))
+//        i += 1
+//      }
       // emit output row
       out.collect(output)
       j += 1
@@ -290,13 +299,19 @@ class UnboundedEventTimeRangeOverProcessFunction(
     // all same timestamp data should have same aggregation value.
     while (j < curRowList.size) {
       val curRow = curRowList.get(j)
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).accumulate(accumulator, curRow.getField(aggFields(i)(0)))
-        i += 1
-      }
+
+      aggregatorHelper.accumulate(
+        lastAccumulator,
+        aggregates,
+        aggFields,
+        curRow)
+//      i = 0
+//      while (i < aggregates.length) {
+//        val index = forwardedFieldCount + i
+//        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
+//        aggregates(i).accumulate(accumulator, curRow.getField(aggFields(i)(0)))
+//        i += 1
+//      }
       j += 1
     }
 
@@ -313,13 +328,18 @@ class UnboundedEventTimeRangeOverProcessFunction(
       }
 
       //copy aggregates to output row
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
-        output.setField(index, aggregates(i).getValue(accumulator))
-        i += 1
-      }
+      aggregatorHelper.setOutput(
+        lastAccumulator,
+        aggregates,
+        forwardedFieldCount,
+        output)
+//      i = 0
+//      while (i < aggregates.length) {
+//        val index = forwardedFieldCount + i
+//        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
+//        output.setField(index, aggregates(i).getValue(accumulator))
+//        i += 1
+//      }
       out.collect(output)
       j += 1
     }

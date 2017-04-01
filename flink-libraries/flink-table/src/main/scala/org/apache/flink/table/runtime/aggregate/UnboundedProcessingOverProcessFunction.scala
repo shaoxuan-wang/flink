@@ -24,7 +24,7 @@ import org.apache.flink.util.{Collector, Preconditions}
 import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.common.state.ValueState
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.functions.AggregateFunction
 
 class UnboundedProcessingOverProcessFunction(
     private val aggregates: Array[AggregateFunction[_]],
@@ -39,12 +39,14 @@ class UnboundedProcessingOverProcessFunction(
 
   private var output: Row = _
   private var state: ValueState[Row] = _
+  private var aggregatorHelper: AggregatorHelper = _
 
   override def open(config: Configuration) {
     output = new Row(forwardedFieldCount + aggregates.length)
     val stateDescriptor: ValueStateDescriptor[Row] =
       new ValueStateDescriptor[Row]("overState", aggregationStateType)
     state = getRuntimeContext.getState(stateDescriptor)
+    aggregatorHelper = new AggregatorHelper
   }
 
   override def processElement(
@@ -71,14 +73,21 @@ class UnboundedProcessingOverProcessFunction(
       i += 1
     }
 
-    i = 0
-    while (i < aggregates.length) {
-      val index = forwardedFieldCount + i
-      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-      output.setField(index, aggregates(i).getValue(accumulator))
-      i += 1
-    }
+    aggregatorHelper.accumulateAndSetOutput(
+      accumulators,
+      aggregates,
+      aggFields,
+      forwardedFieldCount,
+      input,
+      output)
+//    i = 0
+//    while (i < aggregates.length) {
+//      val index = forwardedFieldCount + i
+//      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
+//      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
+//      output.setField(index, aggregates(i).getValue(accumulator))
+//      i += 1
+//    }
     state.update(accumulators)
 
     out.collect(output)
