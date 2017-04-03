@@ -25,7 +25,7 @@ import org.apache.flink.api.common.state.ValueStateDescriptor
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.common.state.ValueState
 import org.apache.flink.table.functions.AggregateFunction
-import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.apache.flink.table.codegen.{AggregateHelperFunction, Compiler}
 import org.slf4j.LoggerFactory
 
 /**
@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory
   * @param aggregationStateType     row type info of aggregation
   */
 class UnboundedProcessingOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,

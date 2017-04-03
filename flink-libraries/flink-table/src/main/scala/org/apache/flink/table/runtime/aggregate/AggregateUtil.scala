@@ -80,7 +80,7 @@ object AggregateUtil {
     val aggregationStateType: RowTypeInfo =
       createDataSetAggregateBufferDataType(Array(), aggregates, inputType)
 
-    val genFunction = generator.generateAggregateHelper[AggregateHelper, Row](
+    val genFunction = generator.generateAggregateHelper[AggregateHelper](
       "UnboundedProcessingOverAggregateHelper",
       classOf[AggregateHelper],
       aggFields,
@@ -134,7 +134,7 @@ object AggregateUtil {
     val aggregationStateType: RowTypeInfo = createAccumulatorRowType(aggregates)
     val inputRowType = FlinkTypeFactory.toInternalRowTypeInfo(inputType).asInstanceOf[RowTypeInfo]
 
-    val genFunction = generator.generateAggregateHelper[AggregateHelper, Row](
+    val genFunction = generator.generateAggregateHelper[AggregateHelper](
       "BoundedOverAggregateHelper",
       classOf[AggregateHelper],
       aggFields,
@@ -211,7 +211,7 @@ object AggregateUtil {
 
     val aggregationStateType: RowTypeInfo = createAccumulatorRowType(aggregates)
 
-    val genFunction = generator.generateAggregateHelper[AggregateHelper, Row](
+    val genFunction = generator.generateAggregateHelper[AggregateHelper](
       "UnboundedEventTimeOverAggregateHelper",
       classOf[AggregateHelper],
       aggFields,

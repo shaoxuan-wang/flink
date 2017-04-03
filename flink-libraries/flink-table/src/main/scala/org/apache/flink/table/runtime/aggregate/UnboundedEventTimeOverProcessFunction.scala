@@ -28,7 +28,7 @@ import org.apache.flink.util.{Collector, Preconditions}
 import org.apache.flink.api.common.state._
 import org.apache.flink.api.java.typeutils.ListTypeInfo
 import org.apache.flink.streaming.api.operators.TimestampedCollector
-import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.apache.flink.table.codegen.{AggregateHelperFunction, Compiler}
 import org.apache.flink.table.functions.AggregateFunction
 import org.slf4j.LoggerFactory
 
@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory
   * @param inputType                the input row tye which the state saved
   */
 abstract class UnboundedEventTimeOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,
@@ -229,14 +229,14 @@ abstract class UnboundedEventTimeOverProcessFunction(
   * The ROWS clause defines on a physical level how many rows are included in a window frame.
   */
 class UnboundedEventTimeRowsOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,
     intermediateType: TypeInformation[Row],
     inputType: TypeInformation[Row])
   extends UnboundedEventTimeOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates,
     aggFields,
     forwardedFieldCount,
@@ -281,14 +281,14 @@ class UnboundedEventTimeRowsOverProcessFunction(
   * that have the same ORDER BY values as the current row.
   */
 class UnboundedEventTimeRangeOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,
     intermediateType: TypeInformation[Row],
     inputType: TypeInformation[Row])
   extends UnboundedEventTimeOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates,
     aggFields,
     forwardedFieldCount,

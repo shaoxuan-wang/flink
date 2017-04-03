@@ -24,7 +24,7 @@ import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.java.typeutils.{ListTypeInfo, RowTypeInfo}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.ProcessFunction
-import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.apache.flink.table.codegen.{AggregateHelperFunction, Compiler}
 import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory
   * @param precedingOffset          preceding offset
  */
 class RangeClauseBoundedOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,

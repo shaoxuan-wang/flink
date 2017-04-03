@@ -34,7 +34,7 @@ import org.apache.flink.api.java.typeutils.ListTypeInfo
 import java.util.{List => JList}
 
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo
-import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.apache.flink.table.codegen.{AggregateHelperFunction, Compiler}
 import org.slf4j.LoggerFactory
 
 /**
@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory
   * @param inputType                row type info of input row
   */
 class BoundedProcessingOverRowProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     precedingOffset: Long,

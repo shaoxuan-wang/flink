@@ -28,7 +28,7 @@ import org.apache.flink.streaming.api.functions.ProcessFunction
 import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
-import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.apache.flink.table.codegen.{AggregateHelperFunction, Compiler}
 import org.slf4j.LoggerFactory
 
 /**
@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory
   * @param precedingOffset          preceding offset
  */
 class RowsClauseBoundedOverProcessFunction(
-    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    GeneratedAggregateHelper: AggregateHelperFunction,
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,

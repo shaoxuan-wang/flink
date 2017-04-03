@@ -253,23 +253,24 @@ class CodeGenerator(
     * @param inputType  Input row type
     *
     * @tparam F Flink Function to be generated.
-    * @tparam T Return type of the Flink Function.
     * @return instance of GeneratedFunction
     */
-  def generateAggregateHelper[F <: Function, T <: Any](
+  def generateAggregateHelper[F <: Function](
       name: String,
       clazz: Class[F],
       aggFields: Array[Array[Int]],
       aggregates: Array[AggregateFunction[_ <: Any]],
       generator: CodeGenerator,
       inputType: RelDataType)
-  : GeneratedFunction[F, T] = {
+  : AggregateHelperFunction = {
 
     val funcName = newName(name)
 
     var parametersList = new Array[String](aggregates.length)
     var accTypeList = new Array[String](aggregates.length)
+    var aggReturnTypeList = new Array[String](aggregates.length)
     var functionReferenceList = new Array[String](aggregates.length)
+    val rowOffset = inputType.getFieldCount
     var index: Int = 0
     while (index < aggregates.length) {
       val aggFunction = aggregates(index)
@@ -287,8 +288,13 @@ class CodeGenerator(
       }
       parametersList(index) = parametersList(index).dropRight(1)
 
-      accTypeList(index) = aggFunction.getClass.getMethod("createAccumulator").
-        getReturnType.getCanonicalName
+      val accType = aggFunction.getClass.getMethod("createAccumulator").
+        getReturnType
+      accTypeList(index) = accType.getCanonicalName
+
+      val aggReturnType = aggFunction.getClass.getMethod("getValue", accType).
+        getReturnType
+      aggReturnTypeList(index) = aggReturnType.getCanonicalName
 
       index += 1
     }
@@ -315,6 +321,7 @@ class CodeGenerator(
     index = 0
     while (index < aggregates.length) {
       val accType = accTypeList(index)
+      val functionReference = functionReferenceList(index)
       funcCode +=
         s"""
            |$accType accumulator$index =
@@ -353,7 +360,7 @@ class CodeGenerator(
            |$accType accumulator$index =
            |  ($accType) accumulators.getField($index);
            |$functionReference.accumulate(accumulator$index, $parameters);
-           |output.setField(rowOffset + $index, aggregates[$index].getValue
+           |output.setField(rowOffset + $index, $functionReference.getValue
            |(accumulator$index));
         """.stripMargin
       index += 1
@@ -425,9 +432,7 @@ class CodeGenerator(
         }
       """.stripMargin
 
-    val returnType = FlinkTypeFactory.toInternalRowTypeInfo(inputType)
-      .asInstanceOf[TypeInformation[T]]
-    GeneratedFunction(funcName, returnType, funcCode)
+    AggregateHelperFunction(funcName, funcCode)
   }
 
   /**
