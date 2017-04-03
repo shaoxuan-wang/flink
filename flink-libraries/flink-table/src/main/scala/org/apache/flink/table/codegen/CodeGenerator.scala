@@ -21,6 +21,7 @@ package org.apache.flink.table.codegen
 import java.math.{BigDecimal => JBigDecimal}
 
 import org.apache.calcite.avatica.util.DateTimeUtils
+import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.rex._
 import org.apache.calcite.sql.SqlOperator
 import org.apache.calcite.sql.`type`.SqlTypeName._
@@ -39,13 +40,14 @@ import org.apache.flink.table.codegen.GeneratedExpression.{NEVER_NULL, NO_CODE}
 import org.apache.flink.table.codegen.Indenter.toISC
 import org.apache.flink.table.codegen.calls.FunctionGenerator
 import org.apache.flink.table.codegen.calls.ScalarOperators._
-import org.apache.flink.table.functions.{FunctionContext, UserDefinedFunction}
+import org.apache.flink.table.functions.{AggregateFunction, FunctionContext, UserDefinedFunction}
 import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils
 import org.apache.flink.table.runtime.TableFunctionCollector
 import org.apache.flink.table.typeutils.TypeCheckUtils._
 import org.apache.flink.types.Row
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 /**
@@ -236,6 +238,196 @@ class CodeGenerator(
     */
   def generateExpression(rex: RexNode): GeneratedExpression = {
     rex.accept(this)
+  }
+
+  /**
+    * Generates a [[org.apache.flink.table.runtime.aggregate.AggregateHelper]] that can be passed
+    * to Java compiler.
+    *
+    * @param name       Class name of the Function. Must not be unique but has to be a valid Java
+    *                   class identifier.
+    * @param clazz      AggregateHelper Function to be generated.
+    * @param aggFields  position (in the input Row) of the input value for each aggregate
+    * @param aggregates List of all aggregate functions
+    * @param generator  code generator instance
+    * @param inputType  Input row type
+    *
+    * @tparam F Flink Function to be generated.
+    * @tparam T Return type of the Flink Function.
+    * @return instance of GeneratedFunction
+    */
+  def generateAggregateHelper[F <: Function, T <: Any](
+      name: String,
+      clazz: Class[F],
+      aggFields: Array[Array[Int]],
+      aggregates: Array[AggregateFunction[_ <: Any]],
+      generator: CodeGenerator,
+      inputType: RelDataType)
+  : GeneratedFunction[F, T] = {
+
+    val funcName = newName(name)
+
+    var parametersList = new Array[String](aggregates.length)
+    var accTypeList = new Array[String](aggregates.length)
+    var functionReferenceList = new Array[String](aggregates.length)
+    var index: Int = 0
+    while (index < aggregates.length) {
+      val aggFunction = aggregates(index)
+      functionReferenceList(index) = generator.addReusableFunction(aggFunction)
+      val field = aggFields(index)
+      val inputTypeInfo = inputType.getFieldList().asScala.map(_.getType).map(FlinkTypeFactory.toTypeInfo)
+      val signature = field.map(inputTypeInfo(_))
+      val parameterTypes = signature.map(_.getTypeClass.getCanonicalName)
+
+      parametersList(index) = ""
+      parameterTypes.zipWithIndex.map {
+        case (parameterType, i) =>
+          val pos = field(i)
+          parametersList(index) += s"($parameterType) input.getField($pos),"
+      }
+      parametersList(index) = parametersList(index).dropRight(1)
+
+      accTypeList(index) = aggFunction.getClass.getMethod("createAccumulator").
+        getReturnType.getCanonicalName
+
+      index += 1
+    }
+
+    //Generate setOutput method
+    var funcCode =
+      j"""
+        public class $funcName extends org.apache.flink.table.runtime.aggregate.AggregateHelper {
+         |
+         |${reuseMemberCode()}
+         |public $funcName() throws Exception {
+         |  ${reuseInitCode()}
+         |}
+         |${reuseConstructorCode(funcName)}
+         |
+         |public void setOutput(
+         |  org.apache.flink.types.Row accumulators,
+         |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
+         |  int rowOffset,
+         |  org.apache.flink.types.Row output) {
+         |    int i = 0;
+      """.stripMargin
+
+    index = 0
+    while (index < aggregates.length) {
+      val accType = accTypeList(index)
+      funcCode +=
+        s"""
+           |$accType accumulator$index =
+           |  ($accType) accumulators.getField($index);
+           |output.setField(rowOffset + $index, aggregates[$index].getValue
+           |(accumulator$index));
+        """.stripMargin
+      index += 1
+    }
+
+    funcCode +=
+      j"""
+         |  }
+      """.stripMargin
+
+    //Generate accumulateAndSetOutput method
+    funcCode +=
+      j"""
+        |public void accumulateAndSetOutput(
+        |  org.apache.flink.types.Row accumulators,
+        |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
+        |  int[][] aggFields,
+        |  int rowOffset,
+        |  org.apache.flink.types.Row input,
+        |  org.apache.flink.types.Row output) {
+        |    int i = 0;
+      """.stripMargin
+
+    index = 0
+    while (index < aggregates.length) {
+      val accType = accTypeList(index)
+      val functionReference = functionReferenceList(index)
+      val parameters = parametersList(index)
+      funcCode +=
+        s"""
+           |$accType accumulator$index =
+           |  ($accType) accumulators.getField($index);
+           |$functionReference.accumulate(accumulator$index, $parameters);
+           |output.setField(rowOffset + $index, aggregates[$index].getValue
+           |(accumulator$index));
+        """.stripMargin
+      index += 1
+    }
+
+    funcCode +=
+      j"""
+         |  }
+      """.stripMargin
+
+    //Generate accumulate method
+    funcCode +=
+      j"""
+         |public void accumulate(
+         |  org.apache.flink.types.Row accumulators,
+         |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
+         |  int[][] aggFields,
+         |  org.apache.flink.types.Row input) {
+         |    int i = 0;
+      """.stripMargin
+
+    index = 0
+    while (index < aggregates.length) {
+      val accType = accTypeList(index)
+      val functionReference = functionReferenceList(index)
+      val parameters = parametersList(index)
+      funcCode +=
+        s"""
+           |$accType accumulator$index =
+           |  ($accType) accumulators.getField($index);
+           |$functionReference.accumulate(accumulator$index, $parameters);
+        """.stripMargin
+      index += 1
+    }
+
+    funcCode +=
+      j"""
+         |  }
+      """.stripMargin
+
+    //Generate retract method
+    funcCode +=
+      j"""
+         |public void retract(
+         |  org.apache.flink.types.Row accumulators,
+         |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
+         |  int[][] aggFields,
+         |  org.apache.flink.types.Row input) {
+         |    int i = 0;
+      """.stripMargin
+
+    index = 0
+    while (index < aggregates.length) {
+      val accType = accTypeList(index)
+      val functionReference = functionReferenceList(index)
+      val parameters = parametersList(index)
+      funcCode +=
+        s"""
+           |$accType accumulator$index =
+           |  ($accType) accumulators.getField($index);
+           |$functionReference.retract(accumulator$index, $parameters);
+        """.stripMargin
+      index += 1
+    }
+
+    funcCode +=
+      j"""
+         |  }
+        }
+      """.stripMargin
+
+    val returnType = FlinkTypeFactory.toInternalRowTypeInfo(inputType)
+      .asInstanceOf[TypeInformation[T]]
+    GeneratedFunction(funcName, returnType, funcCode)
   }
 
   /**

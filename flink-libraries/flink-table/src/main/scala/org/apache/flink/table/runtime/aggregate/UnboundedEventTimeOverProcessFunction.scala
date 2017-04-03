@@ -28,26 +28,30 @@ import org.apache.flink.util.{Collector, Preconditions}
 import org.apache.flink.api.common.state._
 import org.apache.flink.api.java.typeutils.ListTypeInfo
 import org.apache.flink.streaming.api.operators.TimestampedCollector
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.apache.flink.table.functions.AggregateFunction
+import org.slf4j.LoggerFactory
 
 
 /**
   * A ProcessFunction to support unbounded event-time over-window
   *
-  * @param aggregates the aggregate functions
-  * @param aggFields  the filed index which the aggregate functions use
-  * @param forwardedFieldCount the input fields count
-  * @param intermediateType the intermediate row tye which the state saved
-  * @param inputType the input row tye which the state saved
-  *
+  * @param GeneratedAggregateHelper Generated aggregate helper function
+  * @param aggregates               the aggregate functions
+  * @param aggFields                the filed index which the aggregate functions use
+  * @param forwardedFieldCount      the input fields count
+  * @param intermediateType         the intermediate row tye which the state saved
+  * @param inputType                the input row tye which the state saved
   */
 abstract class UnboundedEventTimeOverProcessFunction(
-    private val aggregates: Array[AggregateFunction[_]],
-    private val aggFields: Array[Array[Int]],
-    private val forwardedFieldCount: Int,
-    private val intermediateType: TypeInformation[Row],
-    private val inputType: TypeInformation[Row])
-  extends ProcessFunction[Row, Row]{
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    aggregates: Array[AggregateFunction[_]],
+    aggFields: Array[Array[Int]],
+    forwardedFieldCount: Int,
+    intermediateType: TypeInformation[Row],
+    inputType: TypeInformation[Row])
+  extends ProcessFunction[Row, Row]
+    with Compiler[AggregateHelper] {
 
   Preconditions.checkNotNull(aggregates)
   Preconditions.checkNotNull(aggFields)
@@ -60,9 +64,18 @@ abstract class UnboundedEventTimeOverProcessFunction(
   private var rowMapState: MapState[Long, JList[Row]] = _
   // list to sort timestamps to access rows in timestamp order
   private var sortedTimestamps: util.LinkedList[Long] = _
-
+  val LOG = LoggerFactory.getLogger(this.getClass)
+  protected var function: AggregateHelper = _
 
   override def open(config: Configuration) {
+    LOG.debug(s"Compiling AggregateHelper: $GeneratedAggregateHelper.name \n\n " +
+                s"Code:\n$GeneratedAggregateHelper.code")
+    val clazz = compile(getRuntimeContext.getUserCodeClassLoader,
+                        GeneratedAggregateHelper.name,
+                        GeneratedAggregateHelper.code)
+    LOG.debug("Instantiating AggregateHelper.")
+    function = clazz.newInstance()
+
     output = new Row(forwardedFieldCount + aggregates.length)
     sortedTimestamps = new util.LinkedList[Long]()
 
@@ -216,12 +229,14 @@ abstract class UnboundedEventTimeOverProcessFunction(
   * The ROWS clause defines on a physical level how many rows are included in a window frame.
   */
 class UnboundedEventTimeRowsOverProcessFunction(
-   aggregates: Array[AggregateFunction[_]],
-   aggFields: Array[Array[Int]],
-   forwardedFieldCount: Int,
-   intermediateType: TypeInformation[Row],
-   inputType: TypeInformation[Row])
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    aggregates: Array[AggregateFunction[_]],
+    aggFields: Array[Array[Int]],
+    forwardedFieldCount: Int,
+    intermediateType: TypeInformation[Row],
+    inputType: TypeInformation[Row])
   extends UnboundedEventTimeOverProcessFunction(
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
     aggregates,
     aggFields,
     forwardedFieldCount,
@@ -233,30 +248,28 @@ class UnboundedEventTimeRowsOverProcessFunction(
     lastAccumulator: Row,
     out: Collector[Row]): Unit = {
 
-    var j = 0
     var i = 0
-    while (j < curRowList.size) {
-      val curRow = curRowList.get(j)
-      i = 0
+    while (i < curRowList.size) {
+      val curRow = curRowList.get(i)
 
+      var j = 0
       // copy forwarded fields to output row
-      while (i < forwardedFieldCount) {
-        output.setField(i, curRow.getField(i))
-        i += 1
+      while (j < forwardedFieldCount) {
+        output.setField(j, curRow.getField(j))
+        j += 1
       }
 
       // update accumulators and copy aggregates to output row
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).accumulate(accumulator, curRow.getField(aggFields(i)(0)))
-        output.setField(index, aggregates(i).getValue(accumulator))
-        i += 1
-      }
+      function.accumulateAndSetOutput(
+        lastAccumulator,
+        aggregates,
+        aggFields,
+        forwardedFieldCount,
+        curRow,
+        output)
       // emit output row
       out.collect(output)
-      j += 1
+      i += 1
     }
   }
 }
@@ -268,12 +281,14 @@ class UnboundedEventTimeRowsOverProcessFunction(
   * that have the same ORDER BY values as the current row.
   */
 class UnboundedEventTimeRangeOverProcessFunction(
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
     aggregates: Array[AggregateFunction[_]],
     aggFields: Array[Array[Int]],
     forwardedFieldCount: Int,
     intermediateType: TypeInformation[Row],
     inputType: TypeInformation[Row])
   extends UnboundedEventTimeOverProcessFunction(
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
     aggregates,
     aggFields,
     forwardedFieldCount,
@@ -285,43 +300,39 @@ class UnboundedEventTimeRangeOverProcessFunction(
     lastAccumulator: Row,
     out: Collector[Row]): Unit = {
 
-    var j = 0
     var i = 0
     // all same timestamp data should have same aggregation value.
-    while (j < curRowList.size) {
-      val curRow = curRowList.get(j)
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).accumulate(accumulator, curRow.getField(aggFields(i)(0)))
-        i += 1
-      }
-      j += 1
+    while (i < curRowList.size) {
+      val curRow = curRowList.get(i)
+
+      function.accumulate(
+        lastAccumulator,
+        aggregates,
+        aggFields,
+        curRow)
+      i += 1
     }
 
     // emit output row
-    j = 0
-    while (j < curRowList.size) {
-      val curRow = curRowList.get(j)
+    i = 0
+    while (i < curRowList.size) {
+      val curRow = curRowList.get(i)
 
       // copy forwarded fields to output row
-      i = 0
-      while (i < forwardedFieldCount) {
-        output.setField(i, curRow.getField(i))
-        i += 1
+      var j = 0
+      while (j < forwardedFieldCount) {
+        output.setField(j, curRow.getField(j))
+        j += 1
       }
 
       //copy aggregates to output row
-      i = 0
-      while (i < aggregates.length) {
-        val index = forwardedFieldCount + i
-        val accumulator = lastAccumulator.getField(i).asInstanceOf[Accumulator]
-        output.setField(index, aggregates(i).getValue(accumulator))
-        i += 1
-      }
+      function.setOutput(
+        lastAccumulator,
+        aggregates,
+        forwardedFieldCount,
+        output)
       out.collect(output)
-      j += 1
+      i += 1
     }
   }
 }

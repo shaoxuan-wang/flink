@@ -35,6 +35,7 @@ import org.apache.flink.streaming.api.windowing.windows.{Window => DataStreamWin
 import org.apache.flink.table.api.TableException
 import org.apache.flink.table.calcite.FlinkRelBuilder.NamedWindowProperty
 import org.apache.flink.table.calcite.FlinkTypeFactory
+import org.apache.flink.table.codegen.CodeGenerator
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.functions.aggfunctions._
 import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
@@ -57,15 +58,18 @@ object AggregateUtil {
     * Create an [[org.apache.flink.streaming.api.functions.ProcessFunction]] to evaluate final
     * aggregate value.
     *
+    * @param generator       code generator instance
     * @param namedAggregates List of calls to aggregate functions and their output field names
-    * @param inputType Input row type
-    * @param isPartitioned Flag to indicate whether the input is partitioned or not
+    * @param inputType       Input row type
+    * @param isPartitioned   Flag to indicate whether the input is partitioned or not
+    *
     * @return [[org.apache.flink.streaming.api.functions.ProcessFunction]]
     */
   private[flink] def createUnboundedProcessingOverProcessFunction(
-    namedAggregates: Seq[CalcitePair[AggregateCall, String]],
-    inputType: RelDataType,
-    isPartitioned: Boolean = true): ProcessFunction[Row, Row] = {
+      generator: CodeGenerator,
+      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+      inputType: RelDataType,
+      isPartitioned: Boolean = true): ProcessFunction[Row, Row] = {
 
     val (aggFields, aggregates) =
       transformToAggregateFunctions(
@@ -76,14 +80,24 @@ object AggregateUtil {
     val aggregationStateType: RowTypeInfo =
       createDataSetAggregateBufferDataType(Array(), aggregates, inputType)
 
+    val genFunction = generator.generateAggregateHelper[AggregateHelper, Row](
+      "UnboundedProcessingOverAggregateHelper",
+      classOf[AggregateHelper],
+      aggFields,
+      aggregates,
+      generator,
+      inputType)
+
     if (isPartitioned) {
       new UnboundedProcessingOverProcessFunction(
+        genFunction,
         aggregates,
         aggFields,
         inputType.getFieldCount,
         aggregationStateType)
     } else {
       new UnboundedNonPartitionedProcessingOverProcessFunction(
+        genFunction,
         aggregates,
         aggFields,
         inputType.getFieldCount,
@@ -95,6 +109,7 @@ object AggregateUtil {
     * Create an [[org.apache.flink.streaming.api.functions.ProcessFunction]] for
     * bounded OVER window to evaluate final aggregate value.
     *
+    * @param generator       code generator instance
     * @param namedAggregates List of calls to aggregate functions and their output field names
     * @param inputType       Input row type
     * @param precedingOffset the preceding offset
@@ -103,11 +118,12 @@ object AggregateUtil {
     * @return [[org.apache.flink.streaming.api.functions.ProcessFunction]]
     */
   private[flink] def createBoundedOverProcessFunction(
-    namedAggregates: Seq[CalcitePair[AggregateCall, String]],
-    inputType: RelDataType,
-    precedingOffset: Long,
-    isRangeClause: Boolean,
-    isRowTimeType: Boolean): ProcessFunction[Row, Row] = {
+      generator: CodeGenerator,
+      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+      inputType: RelDataType,
+      precedingOffset: Long,
+      isRangeClause: Boolean,
+      isRowTimeType: Boolean): ProcessFunction[Row, Row] = {
 
     val (aggFields, aggregates) =
       transformToAggregateFunctions(
@@ -118,9 +134,18 @@ object AggregateUtil {
     val aggregationStateType: RowTypeInfo = createAccumulatorRowType(aggregates)
     val inputRowType = FlinkTypeFactory.toInternalRowTypeInfo(inputType).asInstanceOf[RowTypeInfo]
 
+    val genFunction = generator.generateAggregateHelper[AggregateHelper, Row](
+      "BoundedOverAggregateHelper",
+      classOf[AggregateHelper],
+      aggFields,
+      aggregates,
+      generator,
+      inputType)
+
     if (isRowTimeType) {
       if (isRangeClause) {
         new RangeClauseBoundedOverProcessFunction(
+          genFunction,
           aggregates,
           aggFields,
           inputType.getFieldCount,
@@ -130,6 +155,7 @@ object AggregateUtil {
         )
       } else {
         new RowsClauseBoundedOverProcessFunction(
+          genFunction,
           aggregates,
           aggFields,
           inputType.getFieldCount,
@@ -141,6 +167,7 @@ object AggregateUtil {
     } else {
       if (isRangeClause) {
         new BoundedProcessingOverRangeProcessFunction(
+          genFunction,
           aggregates,
           aggFields,
           inputType.getFieldCount,
@@ -149,6 +176,7 @@ object AggregateUtil {
           FlinkTypeFactory.toInternalRowTypeInfo(inputType))
       } else {
         new BoundedProcessingOverRowProcessFunction(
+          genFunction,
           aggregates,
           aggFields,
           precedingOffset,
@@ -162,14 +190,18 @@ object AggregateUtil {
   /**
     * Create an [[ProcessFunction]] to evaluate final aggregate value.
     *
+    * @param generator       code generator instance
     * @param namedAggregates List of calls to aggregate functions and their output field names
-    * @param inputType Input row type
+    * @param inputType       Input row type
+    * @param isRows          Flag to indicate if whether this is a Row (true) or a Range (false)
+    *                        over window process
     * @return [[UnboundedEventTimeOverProcessFunction]]
     */
   private[flink] def createUnboundedEventTimeOverProcessFunction(
-   namedAggregates: Seq[CalcitePair[AggregateCall, String]],
-   inputType: RelDataType,
-   isRows: Boolean): UnboundedEventTimeOverProcessFunction = {
+      generator: CodeGenerator,
+      namedAggregates: Seq[CalcitePair[AggregateCall, String]],
+      inputType: RelDataType,
+      isRows: Boolean): UnboundedEventTimeOverProcessFunction = {
 
     val (aggFields, aggregates) =
       transformToAggregateFunctions(
@@ -179,9 +211,18 @@ object AggregateUtil {
 
     val aggregationStateType: RowTypeInfo = createAccumulatorRowType(aggregates)
 
+    val genFunction = generator.generateAggregateHelper[AggregateHelper, Row](
+      "UnboundedEventTimeOverAggregateHelper",
+      classOf[AggregateHelper],
+      aggFields,
+      aggregates,
+      generator,
+      inputType)
+
     if (isRows) {
       // ROWS unbounded over process function
       new UnboundedEventTimeRowsOverProcessFunction(
+        genFunction,
         aggregates,
         aggFields,
         inputType.getFieldCount,
@@ -190,6 +231,7 @@ object AggregateUtil {
     } else {
       // RANGE unbounded over process function
       new UnboundedEventTimeRangeOverProcessFunction(
+        genFunction,
         aggregates,
         aggFields,
         inputType.getFieldCount,

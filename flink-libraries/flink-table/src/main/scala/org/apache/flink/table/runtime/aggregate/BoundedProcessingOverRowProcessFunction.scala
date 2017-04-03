@@ -34,15 +34,31 @@ import org.apache.flink.api.java.typeutils.ListTypeInfo
 import java.util.{List => JList}
 
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo
+import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.slf4j.LoggerFactory
 
+/**
+  * Process Function for ROW clause processing-time bounded OVER window
+  *
+  * @param GeneratedAggregateHelper Generated aggregate helper function
+  * @param aggregates               list of all [[AggregateFunction]] used for this aggregation
+  * @param aggFields                position (in the input Row) of the input value for each
+  *                                 aggregate
+  * @param precedingOffset          preceding offset
+  * @param forwardedFieldCount      count of forwarded fields.
+  * @param aggregatesTypeInfo       row type info of aggregation
+  * @param inputType                row type info of input row
+  */
 class BoundedProcessingOverRowProcessFunction(
-  private val aggregates: Array[AggregateFunction[_]],
-  private val aggFields: Array[Array[Int]],
-  private val precedingOffset: Long,
-  private val forwardedFieldCount: Int,
-  private val aggregatesTypeInfo: RowTypeInfo,
-  private val inputType: TypeInformation[Row])
-    extends ProcessFunction[Row, Row] {
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    aggregates: Array[AggregateFunction[_]],
+    aggFields: Array[Array[Int]],
+    precedingOffset: Long,
+    forwardedFieldCount: Int,
+    aggregatesTypeInfo: RowTypeInfo,
+    inputType: TypeInformation[Row])
+  extends ProcessFunction[Row, Row]
+    with Compiler[AggregateHelper] {
 
   Preconditions.checkNotNull(aggregates)
   Preconditions.checkNotNull(aggFields)
@@ -54,8 +70,17 @@ class BoundedProcessingOverRowProcessFunction(
   private var output: Row = _
   private var counterState: ValueState[Long] = _
   private var smallestTsState: ValueState[Long] = _
+  val LOG = LoggerFactory.getLogger(this.getClass)
+  private var function: AggregateHelper = _
 
   override def open(config: Configuration) {
+    LOG.debug(s"Compiling AggregateHelper: $GeneratedAggregateHelper.name \n\n " +
+                s"Code:\n$GeneratedAggregateHelper.code")
+    val clazz = compile(getRuntimeContext.getUserCodeClassLoader,
+                        GeneratedAggregateHelper.name,
+                        GeneratedAggregateHelper.code)
+    LOG.debug("Instantiating AggregateHelper.")
+    function = clazz.newInstance()
 
     output = new Row(forwardedFieldCount + aggregates.length)
     // We keep the elements received in a Map state keyed
@@ -89,9 +114,9 @@ class BoundedProcessingOverRowProcessFunction(
     out: Collector[Row]): Unit = {
 
     val currentTime = ctx.timerService.currentProcessingTime
-    var i = 0
 
     // initialize state for the processed element
+    var i = 0
     var accumulators = accumulatorState.value
     if (accumulators == null) {
       accumulators = new Row(aggregates.length)
@@ -115,13 +140,14 @@ class BoundedProcessingOverRowProcessFunction(
 
       // get oldest element beyond buffer size
       // and if oldest element exist, retract value
-      i = 0
-      while (i < aggregates.length) {
-        val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-        aggregates(i).retract(accumulator, retractList.get(0).getField(aggFields(i)(0)))
-        i += 1
-      }
+      val retractRow = retractList.get(0)
+      function.retract(
+        accumulators,
+        aggregates,
+        aggFields,
+        retractRow)
       retractList.remove(0)
+
       // if reference timestamp list not empty, keep the list
       if (!retractList.isEmpty) {
         rowMapState.put(smallestTs, retractList)
@@ -153,14 +179,13 @@ class BoundedProcessingOverRowProcessFunction(
     }
 
     // accumulate current row and set aggregate in output row
-    i = 0
-    while (i < aggregates.length) {
-      val index = forwardedFieldCount + i
-      val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-      aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-      output.setField(index, aggregates(i).getValue(accumulator))
-      i += 1
-    }
+    function.accumulateAndSetOutput(
+      accumulators,
+      aggregates,
+      aggFields,
+      forwardedFieldCount,
+      input,
+      output)
 
     // update map state, accumulator state, counter and timestamp
     val currentTimeState = rowMapState.get(currentTime)

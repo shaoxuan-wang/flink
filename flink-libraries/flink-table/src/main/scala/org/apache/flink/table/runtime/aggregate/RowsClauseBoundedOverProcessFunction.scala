@@ -25,28 +25,34 @@ import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.java.typeutils.{ListTypeInfo, RowTypeInfo}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.streaming.api.functions.ProcessFunction
-import org.apache.flink.table.functions.{Accumulator, AggregateFunction}
+import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 import org.apache.flink.util.{Collector, Preconditions}
+import org.apache.flink.table.codegen.{Compiler, GeneratedFunction}
+import org.slf4j.LoggerFactory
 
 /**
  * Process Function for ROWS clause event-time bounded OVER window
  *
- * @param aggregates           the list of all [[AggregateFunction]] used for this aggregation
- * @param aggFields            the position (in the input Row) of the input value for each aggregate
- * @param forwardedFieldCount  the count of forwarded fields.
- * @param aggregationStateType the row type info of aggregation
- * @param inputRowType         the row type info of input row
- * @param precedingOffset      the preceding offset
+  * @param GeneratedAggregateHelper Generated aggregate helper function
+  * @param aggregates               list of all [[AggregateFunction]] used for this aggregation
+  * @param aggFields                position (in the input Row) of the input value for each
+  *                                 aggregate
+  * @param forwardedFieldCount      count of forwarded fields.
+  * @param aggregationStateType     row type info of aggregation
+  * @param inputRowType             row type info of input row
+  * @param precedingOffset          preceding offset
  */
 class RowsClauseBoundedOverProcessFunction(
-    private val aggregates: Array[AggregateFunction[_]],
-    private val aggFields: Array[Array[Int]],
-    private val forwardedFieldCount: Int,
-    private val aggregationStateType: RowTypeInfo,
-    private val inputRowType: RowTypeInfo,
-    private val precedingOffset: Long)
-  extends ProcessFunction[Row, Row] {
+    GeneratedAggregateHelper: GeneratedFunction[AggregateHelper, Row],
+    aggregates: Array[AggregateFunction[_]],
+    aggFields: Array[Array[Int]],
+    forwardedFieldCount: Int,
+    aggregationStateType: RowTypeInfo,
+    inputRowType: RowTypeInfo,
+    precedingOffset: Long)
+  extends ProcessFunction[Row, Row]
+    with Compiler[AggregateHelper] {
 
   Preconditions.checkNotNull(aggregates)
   Preconditions.checkNotNull(aggFields)
@@ -72,7 +78,17 @@ class RowsClauseBoundedOverProcessFunction(
   // to this time stamp.
   private var dataState: MapState[Long, JList[Row]] = _
 
+  val LOG = LoggerFactory.getLogger(this.getClass)
+  private var function: AggregateHelper = _
+
   override def open(config: Configuration) {
+    LOG.debug(s"Compiling AggregateHelper: $GeneratedAggregateHelper.name \n\n " +
+                s"Code:\n$GeneratedAggregateHelper.code")
+    val clazz = compile(getRuntimeContext.getUserCodeClassLoader,
+                        GeneratedAggregateHelper.name,
+                        GeneratedAggregateHelper.code)
+    LOG.debug("Instantiating AggregateHelper.")
+    function = clazz.newInstance()
 
     output = new Row(forwardedFieldCount + aggregates.length)
 
@@ -99,7 +115,6 @@ class RowsClauseBoundedOverProcessFunction(
         valueTypeInformation)
 
     dataState = getRuntimeContext.getMapState(mapStateDescriptor)
-
   }
 
   override def processElement(
@@ -199,23 +214,21 @@ class RowsClauseBoundedOverProcessFunction(
 
         // retract old row from accumulators
         if (null != retractRow) {
-          i = 0
-          while (i < aggregates.length) {
-            val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-            aggregates(i).retract(accumulator, retractRow.getField(aggFields(i)(0)))
-            i += 1
-          }
+          function.retract(
+            accumulators,
+            aggregates,
+            aggFields,
+            retractRow)
         }
 
         // accumulate current row and set aggregate in output row
-        i = 0
-        while (i < aggregates.length) {
-          val index = forwardedFieldCount + i
-          val accumulator = accumulators.getField(i).asInstanceOf[Accumulator]
-          aggregates(i).accumulate(accumulator, input.getField(aggFields(i)(0)))
-          output.setField(index, aggregates(i).getValue(accumulator))
-          i += 1
-        }
+        function.accumulateAndSetOutput(
+          accumulators,
+          aggregates,
+          aggFields,
+          forwardedFieldCount,
+          input,
+          output)
         j += 1
 
         out.collect(output)
