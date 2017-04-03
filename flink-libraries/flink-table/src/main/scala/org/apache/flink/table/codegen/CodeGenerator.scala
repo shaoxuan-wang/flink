@@ -47,7 +47,6 @@ import org.apache.flink.table.typeutils.TypeCheckUtils._
 import org.apache.flink.types.Row
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 /**
@@ -264,42 +263,85 @@ class CodeGenerator(
       inputType: RelDataType)
   : AggregateHelperFunction = {
 
-    val funcName = newName(name)
+    def generateSetOutput(
+      accTypes: Array[String],
+      aggs: Array[String],
+      aggStartIdx: Int): String = {
 
-    var parametersList = new Array[String](aggregates.length)
-    var accTypeList = new Array[String](aggregates.length)
-    var aggReturnTypeList = new Array[String](aggregates.length)
-    var functionReferenceList = new Array[String](aggregates.length)
-    val rowOffset = inputType.getFieldCount
-    var index: Int = 0
-    while (index < aggregates.length) {
-      val aggFunction = aggregates(index)
-      functionReferenceList(index) = generator.addReusableFunction(aggFunction)
-      val field = aggFields(index)
-      val inputTypeInfo = inputType.getFieldList().asScala.map(_.getType).map(FlinkTypeFactory.toTypeInfo)
-      val signature = field.map(inputTypeInfo(_))
-      val parameterTypes = signature.map(_.getTypeClass.getCanonicalName)
+      val sig: String =
+        j"""
+            |  public void setOutput(
+            |    org.apache.flink.types.Row accs,
+            |    org.apache.flink.types.Row output)
+            |    """.stripMargin
 
-      parametersList(index) = ""
-      parameterTypes.zipWithIndex.map {
-        case (parameterType, i) =>
-          val pos = field(i)
-          parametersList(index) += s"($parameterType) input.getField($pos),"
-      }
-      parametersList(index) = parametersList(index).dropRight(1)
+      val setAggs: String = {
+        for (i <- aggs.indices) yield
+          j"""
+             |    output.setField(
+             |      ${aggStartIdx + i},
+             |      ${aggs(i)}.getValue((${accTypes(i)}) accs.getField($i)));""".stripMargin
+      }.mkString("\n")
 
-      val accType = aggFunction.getClass.getMethod("createAccumulator").
-        getReturnType
-      accTypeList(index) = accType.getCanonicalName
-
-      val aggReturnType = aggFunction.getClass.getMethod("getValue", accType).
-        getReturnType
-      aggReturnTypeList(index) = aggReturnType.getCanonicalName
-
-      index += 1
+      j"""$sig {
+         |$setAggs
+         |  }""".stripMargin
     }
 
-    //Generate setOutput method
+    def generateAccumulate(
+     accTypes: Array[String],
+     aggs: Array[String],
+     aggIdxs: Array[Array[Int]]): String = {
+
+      val sig: String =
+        j"""
+            |  public void accumulate(
+            |    org.apache.flink.types.Row accs,
+            |    org.apache.flink.types.Row input)"""
+
+      val accumulate: String = {
+        for (i <- aggs.indices) yield
+          j"""
+             |    ${aggs(i)}.accumulate(
+             |      ((${accTypes(i)}) accs.getField($i)),
+             |      input.getField(${aggIdxs(i)(0)}));""".stripMargin
+      }.mkString("\n")
+
+      j"""$sig {
+         |$accumulate
+         |  }""".stripMargin
+    }
+
+    def generateRetract(
+      accTypes: Array[String],
+      aggs: Array[String],
+      aggIdxs: Array[Array[Int]]): String = {
+
+      val sig: String =
+        j"""
+            |  public void retract(
+            |    org.apache.flink.types.Row accs,
+            |    org.apache.flink.types.Row input)"""
+
+      val retract: String = {
+        for (i <- aggs.indices) yield
+          j"""
+             |    ${aggs(i)}.retract(
+             |      ((${accTypes(i)}) accs.getField($i)),
+             |      input.getField(${aggIdxs(i)(0)}));""".stripMargin
+      }.mkString("\n")
+
+      j"""$sig {
+         |$retract
+         |  }""".stripMargin
+    }
+
+    val funcName = newName(name)
+
+    val aggs: Array[String] = aggregates.map(a => generator.addReusableFunction(a))
+    val accTypes: Array[String] = aggregates
+      .map(a => a.getAccumulatorType.getTypeClass.getCanonicalName)
+
     var funcCode =
       j"""
         public class $funcName extends org.apache.flink.table.runtime.aggregate.AggregateHelper {
@@ -310,127 +352,12 @@ class CodeGenerator(
          |}
          |${reuseConstructorCode(funcName)}
          |
-         |public void setOutput(
-         |  org.apache.flink.types.Row accumulators,
-         |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
-         |  int rowOffset,
-         |  org.apache.flink.types.Row output) {
-         |    int i = 0;
-      """.stripMargin
+         """.stripMargin
 
-    index = 0
-    while (index < aggregates.length) {
-      val accType = accTypeList(index)
-      val functionReference = functionReferenceList(index)
-      funcCode +=
-        s"""
-           |$accType accumulator$index =
-           |  ($accType) accumulators.getField($index);
-           |output.setField(rowOffset + $index, aggregates[$index].getValue
-           |(accumulator$index));
-        """.stripMargin
-      index += 1
-    }
-
-    funcCode +=
-      j"""
-         |  }
-      """.stripMargin
-
-    //Generate accumulateAndSetOutput method
-    funcCode +=
-      j"""
-        |public void accumulateAndSetOutput(
-        |  org.apache.flink.types.Row accumulators,
-        |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
-        |  int[][] aggFields,
-        |  int rowOffset,
-        |  org.apache.flink.types.Row input,
-        |  org.apache.flink.types.Row output) {
-        |    int i = 0;
-      """.stripMargin
-
-    index = 0
-    while (index < aggregates.length) {
-      val accType = accTypeList(index)
-      val functionReference = functionReferenceList(index)
-      val parameters = parametersList(index)
-      funcCode +=
-        s"""
-           |$accType accumulator$index =
-           |  ($accType) accumulators.getField($index);
-           |$functionReference.accumulate(accumulator$index, $parameters);
-           |output.setField(rowOffset + $index, $functionReference.getValue
-           |(accumulator$index));
-        """.stripMargin
-      index += 1
-    }
-
-    funcCode +=
-      j"""
-         |  }
-      """.stripMargin
-
-    //Generate accumulate method
-    funcCode +=
-      j"""
-         |public void accumulate(
-         |  org.apache.flink.types.Row accumulators,
-         |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
-         |  int[][] aggFields,
-         |  org.apache.flink.types.Row input) {
-         |    int i = 0;
-      """.stripMargin
-
-    index = 0
-    while (index < aggregates.length) {
-      val accType = accTypeList(index)
-      val functionReference = functionReferenceList(index)
-      val parameters = parametersList(index)
-      funcCode +=
-        s"""
-           |$accType accumulator$index =
-           |  ($accType) accumulators.getField($index);
-           |$functionReference.accumulate(accumulator$index, $parameters);
-        """.stripMargin
-      index += 1
-    }
-
-    funcCode +=
-      j"""
-         |  }
-      """.stripMargin
-
-    //Generate retract method
-    funcCode +=
-      j"""
-         |public void retract(
-         |  org.apache.flink.types.Row accumulators,
-         |  org.apache.flink.table.functions.AggregateFunction[] aggregates,
-         |  int[][] aggFields,
-         |  org.apache.flink.types.Row input) {
-         |    int i = 0;
-      """.stripMargin
-
-    index = 0
-    while (index < aggregates.length) {
-      val accType = accTypeList(index)
-      val functionReference = functionReferenceList(index)
-      val parameters = parametersList(index)
-      funcCode +=
-        s"""
-           |$accType accumulator$index =
-           |  ($accType) accumulators.getField($index);
-           |$functionReference.retract(accumulator$index, $parameters);
-        """.stripMargin
-      index += 1
-    }
-
-    funcCode +=
-      j"""
-         |  }
-        }
-      """.stripMargin
+    funcCode += generateSetOutput(accTypes, aggs, inputType.getFieldCount) + "\n"
+    funcCode += generateAccumulate(accTypes, aggs, aggFields) + "\n"
+    funcCode += generateRetract(accTypes, aggs, aggFields) + "\n"
+    funcCode += "}"
 
     AggregateHelperFunction(funcName, funcCode)
   }

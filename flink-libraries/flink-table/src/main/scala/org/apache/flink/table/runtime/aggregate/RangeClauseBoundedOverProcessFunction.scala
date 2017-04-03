@@ -173,8 +173,6 @@ class RangeClauseBoundedOverProcessFunction(
             val retractRow = retractDataList.get(dataListIndex)
             function.retract(
               accumulators,
-              aggregates,
-              aggFields,
               retractRow)
             dataListIndex += 1
           }
@@ -189,8 +187,6 @@ class RangeClauseBoundedOverProcessFunction(
         // accumulate current row
         function.accumulate(
           accumulators,
-          aggregates,
-          aggFields,
           curRow)
         dataListIndex += 1
       }
@@ -198,8 +194,6 @@ class RangeClauseBoundedOverProcessFunction(
       // set aggregate in output row
       function.setOutput(
         accumulators,
-        aggregates,
-        forwardedFieldCount,
         output)
 
       // copy forwarded fields to output row and emit output row

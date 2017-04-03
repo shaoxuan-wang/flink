@@ -156,8 +156,6 @@ class BoundedProcessingOverRangeProcessFunction(
           val retractRow = elementsRemove.get(iRemove)
           function.retract(
             accumulators,
-            aggregates,
-            aggFields,
             retractRow)
           iRemove += 1
         }
@@ -181,8 +179,6 @@ class BoundedProcessingOverRangeProcessFunction(
       val input = currentElements.get(iElemenets)
       function.accumulate(
         accumulators,
-        aggregates,
-        aggFields,
         input)
       iElemenets += 1
     }
@@ -202,8 +198,6 @@ class BoundedProcessingOverRangeProcessFunction(
       // add the accumulators values to result
       function.setOutput(
         accumulators,
-        aggregates,
-        forwardedFieldCount,
         output)
       out.collect(output)
       iElemenets += 1

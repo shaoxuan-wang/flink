@@ -95,13 +95,9 @@ class UnboundedProcessingOverProcessFunction(
       i += 1
     }
 
-    function.accumulateAndSetOutput(
-      accumulators,
-      aggregates,
-      aggFields,
-      forwardedFieldCount,
-      input,
-      output)
+    function.accumulate(accumulators, input)
+    function.setOutput(accumulators, output)
+
     state.update(accumulators)
 
     out.collect(output)

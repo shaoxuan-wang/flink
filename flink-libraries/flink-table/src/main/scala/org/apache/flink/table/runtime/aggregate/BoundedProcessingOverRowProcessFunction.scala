@@ -143,8 +143,6 @@ class BoundedProcessingOverRowProcessFunction(
       val retractRow = retractList.get(0)
       function.retract(
         accumulators,
-        aggregates,
-        aggFields,
         retractRow)
       retractList.remove(0)
 
@@ -179,13 +177,8 @@ class BoundedProcessingOverRowProcessFunction(
     }
 
     // accumulate current row and set aggregate in output row
-    function.accumulateAndSetOutput(
-      accumulators,
-      aggregates,
-      aggFields,
-      forwardedFieldCount,
-      input,
-      output)
+    function.accumulate(accumulators, input)
+    function.setOutput(accumulators, output)
 
     // update map state, accumulator state, counter and timestamp
     val currentTimeState = rowMapState.get(currentTime)

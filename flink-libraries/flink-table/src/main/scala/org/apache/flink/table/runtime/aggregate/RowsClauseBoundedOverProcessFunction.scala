@@ -216,19 +216,12 @@ class RowsClauseBoundedOverProcessFunction(
         if (null != retractRow) {
           function.retract(
             accumulators,
-            aggregates,
-            aggFields,
             retractRow)
         }
 
         // accumulate current row and set aggregate in output row
-        function.accumulateAndSetOutput(
-          accumulators,
-          aggregates,
-          aggFields,
-          forwardedFieldCount,
-          input,
-          output)
+        function.accumulate(accumulators, input)
+        function.setOutput(accumulators, output)
         j += 1
 
         out.collect(output)

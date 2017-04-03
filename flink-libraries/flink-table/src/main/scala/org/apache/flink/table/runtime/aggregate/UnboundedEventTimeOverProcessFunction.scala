@@ -260,13 +260,8 @@ class UnboundedEventTimeRowsOverProcessFunction(
       }
 
       // update accumulators and copy aggregates to output row
-      function.accumulateAndSetOutput(
-        lastAccumulator,
-        aggregates,
-        aggFields,
-        forwardedFieldCount,
-        curRow,
-        output)
+      function.accumulate(lastAccumulator, curRow)
+      function.setOutput(lastAccumulator, output)
       // emit output row
       out.collect(output)
       i += 1
@@ -307,8 +302,6 @@ class UnboundedEventTimeRangeOverProcessFunction(
 
       function.accumulate(
         lastAccumulator,
-        aggregates,
-        aggFields,
         curRow)
       i += 1
     }
@@ -328,8 +321,6 @@ class UnboundedEventTimeRangeOverProcessFunction(
       //copy aggregates to output row
       function.setOutput(
         lastAccumulator,
-        aggregates,
-        forwardedFieldCount,
         output)
       out.collect(output)
       i += 1

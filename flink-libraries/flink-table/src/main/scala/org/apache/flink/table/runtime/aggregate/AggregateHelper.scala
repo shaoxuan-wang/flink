@@ -19,7 +19,6 @@
 package org.apache.flink.table.runtime.aggregate
 
 import org.apache.flink.api.common.functions.Function
-import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.types.Row
 
 /**
@@ -32,18 +31,9 @@ abstract class AggregateHelper extends Function {
     *
     * @param accumulators the accumulators (saved in a row) which contains the current
     *                     aggregated results
-    * @param aggregates   the list of all
-    *                     [[org.apache.flink.table.functions.AggregateFunction]]
-    *                     used for this aggregation
-    * @param rowOffset    offset of the position (in the output row) where the aggregate results
-    *                     starts
     * @param output       output results collected in a row
     */
-  def setOutput(
-      accumulators: Row,
-      aggregates: Array[AggregateFunction[_]],
-      rowOffset: Int,
-      output: Row)
+  def setOutput(accumulators: Row, output: Row)
 
   /**
     * Accumulate the input values to the accumulators, in the meanwhile calculate the results and
@@ -51,55 +41,27 @@ abstract class AggregateHelper extends Function {
     *
     * @param accumulators the accumulators (saved in a row) which contains the current
     *                     aggregated results
-    * @param aggregates   the list of all
-    *                     [[org.apache.flink.table.functions.AggregateFunction]]
-    *                     used for this aggregation
-    * @param aggFields    the position (in the input Row) of the input value for each aggregate
-    * @param rowOffset    offset of the position (in the output row) where the aggregate results
-    *                     starts
     * @param input        input values bundled in a row
     * @param output       output results collected in a row
     */
-  def accumulateAndSetOutput(
-      accumulators: Row,
-      aggregates: Array[AggregateFunction[_]],
-      aggFields: Array[Array[Int]],
-      rowOffset: Int,
-      input: Row,
-      output: Row)
+//  def accumulateAndSetOutput(accumulators: Row, input: Row, output: Row)
 
   /**
     * Accumulate the input values to the accumulators
     *
     * @param accumulators the accumulators (saved in a row) which contains the current
     *                     aggregated results
-    * @param aggregates   the list of all
-    *                     [[org.apache.flink.table.functions.AggregateFunction]]
-    *                     used for this aggregation
-    * @param aggFields    the position (in the input Row) of the input value for each aggregate
     * @param input        input values bundled in a row
     */
-  def accumulate(
-      accumulators: Row,
-      aggregates: Array[AggregateFunction[_]],
-      aggFields: Array[Array[Int]],
-      input: Row)
+  def accumulate(accumulators: Row, input: Row)
 
   /**
     * Retract the input values from the accumulators
     *
     * @param accumulators the accumulators (saved in a row) which contains the current
     *                     aggregated results
-    * @param aggregates   the list of all
-    *                     [[org.apache.flink.table.functions.AggregateFunction]]
-    *                     used for this aggregation
-    * @param aggFields    the position (in the input Row) of the input value for each aggregate
     * @param input        input values bundled in a row
     */
-  def retract(
-      accumulators: Row,
-      aggregates: Array[AggregateFunction[_]],
-      aggFields: Array[Array[Int]],
-      input: Row)
+  def retract(accumulators: Row, input: Row)
 
 }
