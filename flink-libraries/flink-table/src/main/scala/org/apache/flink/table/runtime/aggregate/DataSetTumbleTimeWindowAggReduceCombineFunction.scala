@@ -68,15 +68,12 @@ class DataSetTumbleTimeWindowAggReduceCombineFunction(
 
     while (iterator.hasNext) {
       val record = iterator.next()
-      function.mergeAccumulatorsPairWithKeyOffset(accumulators, record)
+      function.mergeAccumulatorsPair(accumulators, record)
       last = record
     }
 
-    // set the partial merged result to the aggregateBuffer
-    function.copyAccumulatorsToBuffer(accumulators, aggregateBuffer)
-
-    // set group keys to aggregateBuffer.
-    function.setKeyToOutput(last, aggregateBuffer)
+    // set group keys and partial merged result to aggregateBuffer
+    function.setForwardedFields(last, accumulators, aggregateBuffer)
 
     // set the rowtime attribute
     val rowtimePos = keysAndAggregatesArity

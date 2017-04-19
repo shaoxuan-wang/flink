@@ -146,6 +146,7 @@ class BoundedProcessingOverRangeProcessFunctionTest {
         |
         |  public void setForwardedFields(
         |    org.apache.flink.types.Row input,
+        |    org.apache.flink.types.Row accs,
         |    org.apache.flink.types.Row output) {
         |
         |    output.setField(0, input.getField(0));
@@ -166,38 +167,8 @@ class BoundedProcessingOverRangeProcessFunctionTest {
         |    return null;
         |  }
         |
-        |  public org.apache.flink.types.Row mergeAccumulatorsPairWithKeyOffset(
-        |    org.apache.flink.types.Row a,
-        |    org.apache.flink.types.Row b) {
-        |    return null;
-        |  }
-        |
-        |  public void accumulateWithKeyOffset(
-        |    org.apache.flink.types.Row accs,
-        |    org.apache.flink.types.Row input) {
-        |  }
-        |
-        |  public void setAggregationResultsWithKeyOffset(
-        |    org.apache.flink.types.Row accs,
-        |    org.apache.flink.types.Row output) {
-        |  }
-        |
-        |  public void setKeyToOutput(
-        |    org.apache.flink.types.Row input,
-        |    org.apache.flink.types.Row output) {
-        |  }
-        |
         |  public void resetAccumulator(
         |    org.apache.flink.types.Row accs) {
-        |  }
-        |
-        |  public void copyAccumulatorsToBuffer(
-        |    org.apache.flink.types.Row accumulators,
-        |    org.apache.flink.types.Row buffer) {
-        |  }
-        |
-        |  public void createAccumulatorsAndSetToOutput(
-        |    org.apache.flink.types.Row output) {
         |  }
         |}
       """.stripMargin

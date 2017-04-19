@@ -80,15 +80,15 @@ class DataSetTumbleTimeWindowAggReduceGroupFunction(
 
     while (iterator.hasNext) {
       val record = iterator.next()
-      function.mergeAccumulatorsPairWithKeyOffset(accumulators, record)
+      function.mergeAccumulatorsPair(accumulators, record)
       last = record
     }
 
     // set group keys value to final output.
-    function.setKeyToOutput(last, output)
+    function.setForwardedFields(last, null, output)
 
     // get final aggregate value and set to output.
-    function.setAggregationResultsWithKeyOffset(accumulators, output)
+    function.setAggregationResults(accumulators, output)
 
     // get window start timestamp
     val startTs: Long = last.getField(keysAndAggregatesArity).asInstanceOf[Long]
