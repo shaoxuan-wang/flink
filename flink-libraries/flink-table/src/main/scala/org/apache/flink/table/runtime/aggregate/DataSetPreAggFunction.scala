@@ -72,7 +72,8 @@ class DataSetPreAggFunction(genAggregations: GeneratedAggregationsFunction)
     }
 
     // set group keys and accumulators to output
-    function.setForwardedFields(record, accumulators, output)
+    function.setAggregationResults(accumulators, output)
+    function.setForwardedFields(record, output)
 
     out.collect(output)
   }

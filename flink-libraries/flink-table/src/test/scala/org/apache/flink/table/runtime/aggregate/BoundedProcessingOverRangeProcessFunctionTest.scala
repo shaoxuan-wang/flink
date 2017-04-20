@@ -146,7 +146,6 @@ class BoundedProcessingOverRangeProcessFunctionTest {
         |
         |  public void setForwardedFields(
         |    org.apache.flink.types.Row input,
-        |    org.apache.flink.types.Row accs,
         |    org.apache.flink.types.Row output) {
         |
         |    output.setField(0, input.getField(0));
@@ -167,8 +166,10 @@ class BoundedProcessingOverRangeProcessFunctionTest {
         |    return null;
         |  }
         |
-        |  public void resetAccumulator(
-        |    org.apache.flink.types.Row accs) {
+        |  public void resetAccumulator(org.apache.flink.types.Row accs) {
+        |  }
+        |
+        |  public void setConstantFlags(org.apache.flink.types.Row output) {
         |  }
         |}
       """.stripMargin

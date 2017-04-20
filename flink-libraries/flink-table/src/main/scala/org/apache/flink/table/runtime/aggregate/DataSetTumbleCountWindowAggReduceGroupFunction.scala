@@ -78,7 +78,7 @@ class DataSetTumbleCountWindowAggReduceGroupFunction(
 
       if (windowSize == count) {
         // set group keys value to final output.
-        function.setForwardedFields(record, null, output)
+        function.setForwardedFields(record, output)
 
         function.setAggregationResults(accumulators, output)
         // emit the output

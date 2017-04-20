@@ -71,7 +71,7 @@ class ProcTimeUnboundedPartitionedOver(
       accumulators = function.createAccumulators()
     }
 
-    function.setForwardedFields(input, null, output)
+    function.setForwardedFields(input, output)
 
     function.accumulate(accumulators, input)
     function.setAggregationResults(accumulators, output)

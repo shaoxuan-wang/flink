@@ -48,7 +48,7 @@ class DataSetSessionWindowAggregatePreProcessor(
   with ResultTypeQueryable[Row]
   with Compiler[GeneratedAggregations] {
 
-  private var aggregateBuffer: Row = _
+  private var output: Row = _
   private val rowTimeFieldPos = keysAndAggregatesArity
   private var accumulators: Row = _
 
@@ -66,7 +66,7 @@ class DataSetSessionWindowAggregatePreProcessor(
     function = clazz.newInstance()
 
     accumulators = function.createAccumulators()
-    aggregateBuffer = new Row(rowTimeFieldPos + 2)
+    output = function.createOutputRow()
   }
 
   /**
@@ -104,7 +104,7 @@ class DataSetSessionWindowAggregatePreProcessor(
           function.resetAccumulator(accumulators)
         } else {
           // set group keys to aggregateBuffer.
-          function.setForwardedFields(record, null, aggregateBuffer)
+          function.setForwardedFields(record, output)
         }
 
         windowStart = record.getField(rowTimeFieldPos).asInstanceOf[Long]
@@ -146,15 +146,15 @@ class DataSetSessionWindowAggregatePreProcessor(
       windowStart: Long,
       windowEnd: Long): Unit = {
 
-    function.setForwardedFields(null, accumulators, aggregateBuffer)
+    function.setAggregationResults(accumulators, output)
 
     // intermediate Row WindowStartPos is rowtime pos.
-    aggregateBuffer.setField(rowTimeFieldPos, windowStart)
+    output.setField(rowTimeFieldPos, windowStart)
 
     // intermediate Row WindowEndPos is rowtime pos + 1.
-    aggregateBuffer.setField(rowTimeFieldPos + 1, windowEnd)
+    output.setField(rowTimeFieldPos + 1, windowEnd)
 
-    out.collect(aggregateBuffer)
+    out.collect(output)
   }
 
   override def getProducedType: TypeInformation[Row] = {

@@ -24,7 +24,7 @@ import org.apache.flink.api.common.functions.RichGroupReduceFunction
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.table.codegen.{Compiler, GeneratedAggregationsFunction}
 import org.apache.flink.types.Row
-import org.apache.flink.util.{Collector, Preconditions}
+import org.apache.flink.util.Collector
 import org.slf4j.LoggerFactory
 
 /**
@@ -32,30 +32,17 @@ import org.slf4j.LoggerFactory
   * for batch (DataSet) queries.
   *
   * @param genAggregations Code-generated [[GeneratedAggregations]]
-  * @param gkeyOutFields The positions of the grouping keys in the output
-  * @param groupingSetsMapping The mapping of grouping set keys between input and output positions.
   */
 class DataSetFinalAggFunction(
-    private val genAggregations: GeneratedAggregationsFunction,
-    private val gkeyOutFields: Array[Int],
-    private val groupingSetsMapping: Array[(Int, Int)])
+    private val genAggregations: GeneratedAggregationsFunction)
   extends RichGroupReduceFunction[Row, Row]
     with Compiler[GeneratedAggregations] {
-
-  Preconditions.checkNotNull(gkeyOutFields)
-  Preconditions.checkNotNull(groupingSetsMapping)
 
   private var output: Row = _
   private var accumulators: Row = _
 
   val LOG = LoggerFactory.getLogger(this.getClass)
   private var function: GeneratedAggregations = _
-
-  private val intermediateGKeys: Option[Array[Int]] = if (!groupingSetsMapping.isEmpty) {
-    Some(gkeyOutFields)
-  } else {
-    None
-  }
 
   override def open(config: Configuration) {
     LOG.debug(s"Compiling AggregateHelper: $genAggregations.name \n\n " +
@@ -86,20 +73,13 @@ class DataSetFinalAggFunction(
     }
 
     // set group keys value to final output
-    function.setForwardedFields(record, null, output)
+    function.setForwardedFields(record, output)
 
     // get final aggregate value and set to output.
     function.setAggregationResults(accumulators, output)
 
     // set grouping set flags to output
-    if (intermediateGKeys.isDefined) {
-      var i = 0
-      while (i < groupingSetsMapping.length) {
-        val (in, out) = groupingSetsMapping(i)
-        output.setField(out, !intermediateGKeys.get.contains(in))
-        i += 1
-      }
-    }
+    function.setConstantFlags(output)
 
     out.collect(output)
   }

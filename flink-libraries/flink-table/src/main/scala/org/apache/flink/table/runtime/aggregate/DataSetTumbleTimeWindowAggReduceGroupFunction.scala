@@ -85,7 +85,7 @@ class DataSetTumbleTimeWindowAggReduceGroupFunction(
     }
 
     // set group keys value to final output.
-    function.setForwardedFields(last, null, output)
+    function.setForwardedFields(last, output)
 
     // get final aggregate value and set to output.
     function.setAggregationResults(accumulators, output)

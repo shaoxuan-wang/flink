@@ -20,6 +20,7 @@ package org.apache.flink.table.runtime.aggregate
 import java.lang.Iterable
 
 import org.apache.flink.api.common.functions.CombineFunction
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.table.codegen.GeneratedAggregationsFunction
 import org.apache.flink.types.Row
 
@@ -29,7 +30,8 @@ import org.apache.flink.types.Row
   * [[org.apache.flink.api.java.operators.GroupCombineOperator]].
   * It is used for tumbling time-window on batch.
   *
-  * @param genAggregations        Code-generated [[GeneratedAggregations]]
+  * @param genPreAggregations        Code-generated [[GeneratedAggregations]] for partial aggs.
+  * @param genFinalAggregations        Code-generated [[GeneratedAggregations]] for final aggs.
   * @param windowSize             Tumbling time window size
   * @param windowStartPos         The relative window-start field position to the last field of
   *                               output row
@@ -38,18 +40,34 @@ import org.apache.flink.types.Row
   * @param keysAndAggregatesArity The total arity of keys and aggregates
   */
 class DataSetTumbleTimeWindowAggReduceCombineFunction(
-    genAggregations: GeneratedAggregationsFunction,
+    genPreAggregations: GeneratedAggregationsFunction,
+    genFinalAggregations: GeneratedAggregationsFunction,
     windowSize: Long,
     windowStartPos: Option[Int],
     windowEndPos: Option[Int],
     keysAndAggregatesArity: Int)
   extends DataSetTumbleTimeWindowAggReduceGroupFunction(
-    genAggregations,
+    genFinalAggregations,
     windowSize,
     windowStartPos,
     windowEndPos,
     keysAndAggregatesArity)
     with CombineFunction[Row, Row] {
+
+  protected var preAggfunction: GeneratedAggregations = _
+
+  override def open(config: Configuration): Unit = {
+    super.open(config)
+
+    LOG.debug(s"Compiling AggregateHelper: $genPreAggregations.name \n\n " +
+      s"Code:\n$genPreAggregations.code")
+    val clazz = compile(
+      getClass.getClassLoader,
+      genPreAggregations.name,
+      genPreAggregations.code)
+    LOG.debug("Instantiating AggregateHelper.")
+    preAggfunction = clazz.newInstance()
+  }
 
   /**
     * For sub-grouped intermediate aggregate Rows, merge all of them into aggregate buffer,
@@ -64,16 +82,17 @@ class DataSetTumbleTimeWindowAggReduceCombineFunction(
     val iterator = records.iterator()
 
     // reset accumulator
-    function.resetAccumulator(accumulators)
+    preAggfunction.resetAccumulator(accumulators)
 
     while (iterator.hasNext) {
       val record = iterator.next()
-      function.mergeAccumulatorsPair(accumulators, record)
+      preAggfunction.mergeAccumulatorsPair(accumulators, record)
       last = record
     }
 
     // set group keys and partial merged result to aggregateBuffer
-    function.setForwardedFields(last, accumulators, aggregateBuffer)
+    preAggfunction.setAggregationResults(accumulators, aggregateBuffer)
+    preAggfunction.setForwardedFields(last, aggregateBuffer)
 
     // set the rowtime attribute
     val rowtimePos = keysAndAggregatesArity

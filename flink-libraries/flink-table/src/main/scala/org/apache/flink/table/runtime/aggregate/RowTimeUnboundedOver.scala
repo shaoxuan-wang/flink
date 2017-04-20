@@ -234,7 +234,7 @@ class RowTimeUnboundedRowsOver(
 
       var j = 0
       // copy forwarded fields to output row
-      function.setForwardedFields(curRow, null, output)
+      function.setForwardedFields(curRow, output)
 
       // update accumulators and copy aggregates to output row
       function.accumulate(lastAccumulator, curRow)
@@ -281,7 +281,7 @@ class RowTimeUnboundedRangeOver(
       val curRow = curRowList.get(i)
 
       // copy forwarded fields to output row
-      function.setForwardedFields(curRow, null, output)
+      function.setForwardedFields(curRow, output)
 
       //copy aggregates to output row
       function.setAggregationResults(lastAccumulator, output)

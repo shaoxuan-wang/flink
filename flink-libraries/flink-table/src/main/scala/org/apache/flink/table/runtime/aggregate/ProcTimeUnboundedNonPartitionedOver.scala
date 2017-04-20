@@ -74,7 +74,7 @@ class ProcTimeUnboundedNonPartitionedOver(
     ctx: ProcessFunction[Row, Row]#Context,
     out: Collector[Row]): Unit = {
 
-    function.setForwardedFields(input, null, output)
+    function.setForwardedFields(input, output)
 
     function.accumulate(accumulators, input)
     function.setAggregationResults(accumulators, output)

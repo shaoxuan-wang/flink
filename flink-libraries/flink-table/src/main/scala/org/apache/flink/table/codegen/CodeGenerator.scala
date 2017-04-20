@@ -250,7 +250,13 @@ class CodeGenerator(
     * @param aggregates  All aggregate functions
     * @param aggFields   Indexes of the input fields for all aggregate functions
     * @param aggMapping  The mapping of aggregates to output fields
+    * @param partialResults A flag defining whether final or partial results (accumulators) are set
+    *                       to the output row.
     * @param fwdMapping  The mapping of input fields to output fields
+    * @param mergeMapping An optional mapping to specify the accumulators to merge. If not set, we
+    *                     assume that both rows have the accumulators at the same position.
+    * @param constantFlags An optional parameter to define where to set constant boolean flags in
+    *                      the output row.
     * @param outputArity The number of fields in the output row.
     *
     * @return A GeneratedAggregationsFunction
@@ -262,20 +268,19 @@ class CodeGenerator(
       aggregates: Array[AggregateFunction[_ <: Any]],
       aggFields: Array[Array[Int]],
       aggMapping: Array[Int],
-      outputArity: Int,
-      groupingKeys: Array[Int],
-      ctrlParams: AggCodeGenCtrlParams,
-      fwdMapping: Array[(Int, Int)] = Array(),
-      gkeyOutFields: Array[Int] = null,
-      gkeyOutMapping: Array[(Int, Int)] = null)
+      partialResults: Boolean,
+      fwdMapping: Array[Int],
+      mergeMapping: Option[Array[Int]],
+      constantFlags: Option[Array[(Int, Boolean)]],
+      outputArity: Int)
   : GeneratedAggregationsFunction = {
 
     def genSetAggregationResults(
       accTypes: Array[String],
       aggs: Array[String],
-      aggMapping: Array[Int]): String = {
+      aggMapping: Array[Int],
+      partialResults: Boolean): String = {
 
-      val offset = if (ctrlParams.setResultsWithKeyOffset) groupingKeys.length else 0
       val sig: String =
         j"""
            |  public void setAggregationResults(
@@ -284,13 +289,21 @@ class CodeGenerator(
 
       val setAggs: String = {
         for (i <- aggs.indices) yield
-          j"""
-             |    org.apache.flink.table.functions.AggregateFunction baseClass$i =
-             |      (org.apache.flink.table.functions.AggregateFunction) ${aggs(i)};
-             |
-             |    output.setField(
-             |      ${aggMapping(i) + offset},
-             |      baseClass$i.getValue((${accTypes(i)}) accs.getField($i)));""".stripMargin
+
+          if (partialResults) {
+            j"""
+               |    output.setField(
+               |      ${aggMapping(i)},
+               |      (${accTypes(i)}) accs.getField($i));""".stripMargin
+          } else {
+            j"""
+               |    org.apache.flink.table.functions.AggregateFunction baseClass$i =
+               |      (org.apache.flink.table.functions.AggregateFunction) ${aggs(i)};
+               |
+               |    output.setField(
+               |      ${aggMapping(i)},
+               |      baseClass$i.getValue((${accTypes(i)}) accs.getField($i)));""".stripMargin
+          }
       }.mkString("\n")
 
       j"""
@@ -304,7 +317,6 @@ class CodeGenerator(
      aggs: Array[String],
      parameters: Array[String]): String = {
 
-      val offset = if (ctrlParams.accumulateWithKeyOffset) groupingKeys.length else 0
       val sig: String =
         j"""
             |  public void accumulate(
@@ -315,7 +327,7 @@ class CodeGenerator(
         for (i <- aggs.indices) yield
           j"""
              |    ${aggs(i)}.accumulate(
-             |      ((${accTypes(i)}) accs.getField(${i + offset})),
+             |      ((${accTypes(i)}) accs.getField($i)),
              |      ${parameters(i)});""".stripMargin
       }.mkString("\n")
 
@@ -351,8 +363,6 @@ class CodeGenerator(
     def genCreateAccumulators(
         aggs: Array[String]): String = {
 
-      val offset = if (ctrlParams.accumulateWithKeyOffset) groupingKeys.length else 0
-      val arity = if (ctrlParams.accumulateWithKeyOffset) outputArity else aggs.length
       val sig: String =
         j"""
            |  public org.apache.flink.types.Row createAccumulators()
@@ -360,13 +370,13 @@ class CodeGenerator(
       val init: String =
         j"""
            |      org.apache.flink.types.Row accs =
-           |          new org.apache.flink.types.Row(${arity});"""
+           |          new org.apache.flink.types.Row(${aggs.length});"""
           .stripMargin
       val create: String = {
         for (i <- aggs.indices) yield
           j"""
              |    accs.setField(
-             |      ${offset + i},
+             |      $i,
              |      ${aggs(i)}.createAccumulator());"""
             .stripMargin
       }.mkString("\n")
@@ -382,84 +392,53 @@ class CodeGenerator(
          |  }""".stripMargin
     }
 
-    def genSetForwardedFields(
-        forwardMapping: Array[(Int, Int)]): String = {
+    def genSetForwardedFields(forwardMapping: Array[Int]): String = {
 
       val sig: String =
         j"""
            |  public void setForwardedFields(
            |    org.apache.flink.types.Row input,
-           |    org.apache.flink.types.Row accs,
            |    org.apache.flink.types.Row output)
            |    """.stripMargin
 
       val forward: String = {
-        for (i <- forwardMapping.indices) yield
-          j"""
-             |    output.setField(
-             |      ${forwardMapping(i)._1},
-             |      input.getField(${forwardMapping(i)._2}));"""
-            .stripMargin
+        for (i <- forwardMapping.indices if forwardMapping(i) >= 0) yield
+          {
+            j"""
+               |    output.setField(
+               |      $i,
+               |      input.getField(${forwardMapping(i)}));"""
+              .stripMargin
+          }
       }.mkString("\n")
 
-      var copyKeys: String = ""
-      if (gkeyOutMapping != null) {
-        copyKeys = {
-          for ((out, in) <- gkeyOutMapping) yield
+      j"""$sig {
+         |$forward
+         |  }""".stripMargin
+    }
+
+    def genSetConstantFlags(constantFlags: Option[Array[(Int, Boolean)]]): String = {
+
+      val sig: String =
+        j"""
+           |  public void setConstantFlags(org.apache.flink.types.Row output)
+           |    """.stripMargin
+
+      val setFlags: String = if (constantFlags.isDefined) {
+        {
+          for (cf <- constantFlags.get) yield {
             j"""
-               |      output.setField(
-               |        $out,
-               |        input.getField(${in}));"""
+               |    output.setField(${cf._1}, ${if (cf._2) "true" else "false"});"""
               .stripMargin
-        }.mkString("\n")
-      } else if (gkeyOutFields != null) {
-        copyKeys = {
-          for (i <- gkeyOutFields.indices) yield
-            j"""
-               |      output.setField(
-               |        ${gkeyOutFields(i)},
-               |        input.getField($i));"""
-              .stripMargin
+          }
         }.mkString("\n")
       } else {
-        copyKeys = {
-          for (i <- groupingKeys.indices) yield
-            j"""
-               |      output.setField(
-               |        $i,
-               |        input.getField(${groupingKeys(i)}));"""
-              .stripMargin
-        }.mkString("\n")
+        ""
       }
 
-
-      val copyAccs: String = {
-        for (i <- aggregates.indices) yield
-          j"""
-             |      output.setField(
-             |        ${groupingKeys.length + i},
-             |        accs.getField($i));"""
-            .stripMargin
-      }.mkString("\n")
-
-      if (forwardMapping.length > 0) {
-        // when forwardMappingCopies is not empty, this method just forwarded fields from input
-        // row to output row
-        j"""$sig {
-           |$forward
-           |  }""".stripMargin
-      } else {
-        // when forwardMappingCopies is not defined, this method will be used to copy keys (from
-        // input row if provided) and accumulators (from accs row if provided) to output row
-        j"""$sig {
-           |      if (input != null) {
-           |        $copyKeys
-           |      }
-           |      if (accs != null) {
-           |        $copyAccs
-           |      }
-           |  }""".stripMargin
-      }
+      j"""$sig {
+         |$setFlags
+         |  }""".stripMargin
     }
 
     def genCreateOutputRow(outputArity: Int): String = {
@@ -471,9 +450,11 @@ class CodeGenerator(
 
     def genMergeAccumulatorsPair(
         accTypes: Array[String],
-        aggs: Array[String]): String = {
+        aggs: Array[String],
+        mergeMapping: Option[Array[Int]]): String = {
 
-      val offset = if (ctrlParams.mergeWithKeyOffset) groupingKeys.length else 0
+      val mapping = mergeMapping.getOrElse(aggs.indices.toArray)
+
       val sig: String =
         j"""
            |  public final org.apache.flink.types.Row mergeAccumulatorsPair(
@@ -484,7 +465,7 @@ class CodeGenerator(
         for (i <- aggs.indices) yield
           j"""
              |    ${accTypes(i)} aAcc$i = (${accTypes(i)}) a.getField($i);
-             |    ${accTypes(i)} bAcc$i = (${accTypes(i)}) b.getField(${i + offset});
+             |    ${accTypes(i)} bAcc$i = (${accTypes(i)}) b.getField(${mapping(i)});
              |    accList$i.set(0, aAcc$i);
              |    accList$i.set(1, bAcc$i);
              |    a.setField(
@@ -530,7 +511,6 @@ class CodeGenerator(
         accTypes: Array[String],
         aggs: Array[String]): String = {
 
-      val offset = if (ctrlParams.accumulateWithKeyOffset) groupingKeys.length else 0
       val sig: String =
         j"""
            |  public void resetAccumulator(
@@ -540,7 +520,7 @@ class CodeGenerator(
         for (i <- aggs.indices) yield
           j"""
              |    ${aggs(i)}.resetAccumulator(
-             |      ((${accTypes(i)}) accs.getField(${offset + i})));""".stripMargin
+             |      ((${accTypes(i)}) accs.getField($i)));""".stripMargin
       }.mkString("\n")
 
       j"""$sig {
@@ -582,13 +562,14 @@ class CodeGenerator(
          |
          """.stripMargin
 
-    funcCode += genSetAggregationResults(accTypes, aggs, aggMapping) + "\n"
+    funcCode += genSetAggregationResults(accTypes, aggs, aggMapping, partialResults) + "\n"
     funcCode += genAccumulate(accTypes, aggs, parameters) + "\n"
     funcCode += genRetract(accTypes, aggs, parameters) + "\n"
     funcCode += genCreateAccumulators(aggs) + "\n"
     funcCode += genSetForwardedFields(fwdMapping) + "\n"
+    funcCode += genSetConstantFlags(constantFlags) + "\n"
     funcCode += genCreateOutputRow(outputArity) + "\n"
-    funcCode += genMergeAccumulatorsPair(accTypes, aggs) + "\n"
+    funcCode += genMergeAccumulatorsPair(accTypes, aggs, mergeMapping) + "\n"
     funcCode += genResetAccumulator(accTypes, aggs) + "\n"
     funcCode += "}"
 

@@ -102,7 +102,8 @@ class DataSetSlideTimeWindowAggReduceGroupFunction(
     if (start > windowStart - windowSize) {
 
       // set group keys and partial accumulated result
-      function.setForwardedFields(record, accumulators, intermediateRow)
+      function.setAggregationResults(accumulators, intermediateRow)
+      function.setForwardedFields(record, intermediateRow)
 
       // adopted from SlidingEventTimeWindows.assignWindows
       while (start > windowStart - windowSize) {
@@ -125,7 +126,8 @@ class DataSetSlideTimeWindowAggReduceGroupFunction(
       function.mergeAccumulatorsPair(accumulators, record)
     }
     // set group keys and partial accumulated result
-    function.setForwardedFields(record, accumulators, intermediateRow)
+    function.setAggregationResults(accumulators, intermediateRow)
+    function.setForwardedFields(record, intermediateRow)
 
     intermediateRow.setField(timeFieldPos, record.getField(timeFieldPos))
 

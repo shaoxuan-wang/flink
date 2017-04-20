@@ -46,6 +46,7 @@ class DataSetWindowAggMapFunction(
     with ResultTypeQueryable[Row]
     with Compiler[GeneratedAggregations] {
 
+  private var accs: Row = _
   private var output: Row = _
 
   val LOG = LoggerFactory.getLogger(this.getClass)
@@ -61,16 +62,19 @@ class DataSetWindowAggMapFunction(
     LOG.debug("Instantiating AggregateHelper.")
     function = clazz.newInstance()
 
-    output = function.createAccumulators()
+    accs = function.createAccumulators()
+    output = function.createOutputRow()
   }
 
   override def map(input: Row): Row = {
 
-    function.resetAccumulator(output)
+    function.resetAccumulator(accs)
 
-    function.accumulate(output, input)
+    function.accumulate(accs, input)
 
-    function.setForwardedFields(input, null, output)
+    function.setAggregationResults(accs, output)
+
+    function.setForwardedFields(input, output)
 
     val timeField = input.getField(timeFieldPos)
     val rowtime = getTimestamp(timeField)

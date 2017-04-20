@@ -20,6 +20,7 @@ package org.apache.flink.table.runtime.aggregate
 import java.lang.Iterable
 
 import org.apache.flink.api.common.functions.CombineFunction
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.table.codegen.GeneratedAggregationsFunction
 import org.apache.flink.types.Row
 
@@ -30,20 +31,22 @@ import org.apache.flink.types.Row
   *
   * It is used for sliding on batch for both time and count-windows.
   *
-  * @param genAggregations Code-generated [[GeneratedAggregations]]
+  * @param genPreAggregations Code-generated [[GeneratedAggregations]] for partial aggregation.
+  * @param genFinalAggregations Code-generated [[GeneratedAggregations]] for final aggregation.
   * @param keysAndAggregatesArity The total arity of keys and aggregates
   * @param finalRowWindowStartPos relative window-start position to last field of output row
   * @param finalRowWindowEndPos relative window-end position to last field of output row
   * @param windowSize size of the window, used to determine window-end for output row
   */
 class DataSetSlideWindowAggReduceCombineFunction(
-    genAggregations: GeneratedAggregationsFunction,
+    genPreAggregations: GeneratedAggregationsFunction,
+    genFinalAggregations: GeneratedAggregationsFunction,
     keysAndAggregatesArity: Int,
     finalRowWindowStartPos: Option[Int],
     finalRowWindowEndPos: Option[Int],
     windowSize: Long)
   extends DataSetSlideWindowAggReduceGroupFunction(
-    genAggregations,
+    genFinalAggregations,
     keysAndAggregatesArity,
     finalRowWindowStartPos,
     finalRowWindowEndPos,
@@ -52,19 +55,35 @@ class DataSetSlideWindowAggReduceCombineFunction(
 
   private val intermediateRow: Row = new Row(keysAndAggregatesArity + 1)
 
+  protected var preAggfunction: GeneratedAggregations = _
+
+  override def open(config: Configuration): Unit = {
+    super.open(config)
+
+    LOG.debug(s"Compiling AggregateHelper: $genPreAggregations.name \n\n " +
+      s"Code:\n$genPreAggregations.code")
+    val clazz = compile(
+      getClass.getClassLoader,
+      genPreAggregations.name,
+      genPreAggregations.code)
+    LOG.debug("Instantiating AggregateHelper.")
+    preAggfunction = clazz.newInstance()
+  }
+
   override def combine(records: Iterable[Row]): Row = {
 
     // reset accumulator
-    function.resetAccumulator(accumulators)
+    preAggfunction.resetAccumulator(accumulators)
 
     val iterator = records.iterator()
     var record: Row = null
     while (iterator.hasNext) {
       record = iterator.next()
-      function.mergeAccumulatorsPair(accumulators, record)
+      preAggfunction.mergeAccumulatorsPair(accumulators, record)
     }
     // set group keys and partial accumulated result
-    function.setForwardedFields(record, accumulators, intermediateRow)
+    preAggfunction.setAggregationResults(accumulators, intermediateRow)
+    preAggfunction.setForwardedFields(record, intermediateRow)
 
     intermediateRow.setField(windowStartPos, record.getField(windowStartPos))
 

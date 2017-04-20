@@ -39,11 +39,16 @@ abstract class GeneratedAggregations extends Function {
     * Copies forwarded fields from input row (and sometimes also accumulators row) to output row.
     *
     * @param input        input values bundled in a row
-    * @param accumulators the accumulators (saved in a row) which contains the current
-    *                     aggregated results
     * @param output       output results collected in a row
     */
-  def setForwardedFields(input: Row, accumulators: Row, output: Row)
+  def setForwardedFields(input: Row, output: Row)
+
+  /**
+    * Sets constant flags (boolean fields) to an output row.
+    *
+    * @param output The output row to which the constant flags are set.
+    */
+  def setConstantFlags(output: Row)
 
   /**
     * Accumulate the input values to the accumulators

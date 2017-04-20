@@ -84,7 +84,7 @@ class DataSetSlideWindowAggReduceGroupFunction(
     }
 
     // set group keys value to final output
-    function.setForwardedFields(record, null, output)
+    function.setForwardedFields(record, output)
 
     // get final aggregate value and set to output
     function.setAggregationResults(accumulators, output)

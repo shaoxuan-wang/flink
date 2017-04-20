@@ -117,7 +117,7 @@ class DataSetSessionWindowAggReduceGroupFunction(
           function.resetAccumulator(accumulators)
         } else {
           // set keys to output
-          function.setForwardedFields(record, null, output)
+          function.setForwardedFields(record, output)
         }
 
         windowStart = record.getField(intermediateRowWindowStartPos).asInstanceOf[Long]
