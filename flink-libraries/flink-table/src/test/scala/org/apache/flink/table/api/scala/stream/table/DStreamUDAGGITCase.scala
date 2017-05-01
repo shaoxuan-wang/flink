@@ -172,15 +172,13 @@ class DStreamUDAGGITCase extends StreamingMultipleProgramsTestBase {
     tEnv.registerTable("T1", table)
     tEnv.registerFunction("countFun", new CountAggFunction)
     tEnv.registerFunction("wAvgWithRetract", new WeightedAvgWithRetract)
-    tEnv.registerFunction("udf", Func3)
     val sqlQuery = "SELECT " +
-//        "udf(i,s)" +
-//      "s, " +
-//      "f, " +
-      "countFun(i) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)" +
-//      "sum(d) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)" +
-//  "wAvgWithRetract(l,i) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)," +
-//      "wAvgWithRetract(i,i) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)" +
+      "s, " +
+      "f, " +
+      "countFun(i) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)," +
+      "sum(d) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)," +
+      "wAvgWithRetract(l,i) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)," +
+      "wAvgWithRetract(i,i) OVER (PARTITION BY s ORDER BY ProcTime() RANGE UNBOUNDED preceding)" +
       "from T1"
 
     val results = tEnv.sql(sqlQuery).toDataStream[Row]
@@ -188,12 +186,11 @@ class DStreamUDAGGITCase extends StreamingMultipleProgramsTestBase {
     env.execute()
 
     val expected = Seq(
-      "1", "2", "3", "1", "2", "3", "4", "5", "6", "4", "5", "6", "7")
-//    val expected = Seq(
-//      "Hello,1.0,1,1.0,1,1", "Hello,2.0,2,3.0,1,1", "Hello,3.0,3,6.0,2,2", "Hi,5.0,1,5.0,5,5",
-//      "Hi,6.0,2,11.0,5,5", "Hi,7.0,3,18.0,6,6", "Hello,8.0,4,14.0,5,5", "Hello,9.0,5,23.0,6,6",
-//      "Hello,4.0,6,27.0,6,6", "Hi,10.0,4,28.0,7,7", "Hi,11.0,5,39.0,8,8", "Hi,12.0,6,51.0,9,9",
-//      "Hello,16.0,7,43.0,10,10")
+      "Hello,1.0,1,1.0,1000,1", "Hello,2.0,2,3.0,1666,1", "Hello,3.0,3,6.0,2333,2",
+      "Hi,5.0,1,5.0,5000,5", "Hi,6.0,2,11.0,5545,5", "Hi,7.0,3,18.0,6111,6",
+      "Hello,8.0,4,14.0,5571,5", "Hello,9.0,5,23.0,6913,6", "Hello,4.0,6,27.0,6481,6",
+      "Hi,10.0,4,28.0,7500,7", "Hi,11.0,5,39.0,8487,8", "Hi,12.0,6,51.0,9313,9",
+      "Hello,16.0,7,43.0,10023,10")
     assertEquals(expected, StreamITCase.testResults)
   }
 

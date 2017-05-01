@@ -19,19 +19,20 @@
 
 package org.apache.flink.table.functions.utils
 
-import java.lang.{Long => JLong, Integer => JInt}
+import java.lang.{Integer => JInt, Long => JLong}
 import java.lang.reflect.{Method, Modifier}
 import java.sql.{Date, Time, Timestamp}
 
 import org.apache.commons.codec.binary.Base64
 import com.google.common.primitives.Primitives
-import org.apache.calcite.sql.SqlFunction
+import org.apache.calcite.sql.`type`.SqlTypeName
+import org.apache.calcite.sql.{SqlCallBinding, SqlFunction}
 import org.apache.flink.api.common.functions.InvalidTypesException
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.typeutils.TypeExtractor
 import org.apache.flink.table.calcite.FlinkTypeFactory
 import org.apache.flink.table.api.{TableEnvironment, ValidationException}
-import org.apache.flink.table.functions.{ScalarFunction, TableFunction, UserDefinedFunction, AggregateFunction}
+import org.apache.flink.table.functions.{AggregateFunction, ScalarFunction, TableFunction, UserDefinedFunction}
 import org.apache.flink.table.plan.schema.FlinkTableFunctionImpl
 import org.apache.flink.util.InstantiationUtil
 
@@ -380,8 +381,8 @@ object UserDefinedFunctionUtils {
   /**
     * Prints all eval methods signatures of a class.
     */
-  def signaturesToString(function: UserDefinedFunction): String = {
-    getMethodSignatures(function, "eval").map(signatureToString).mkString(", ")
+  def signaturesToString(function: UserDefinedFunction, name: String): String = {
+    getMethodSignatures(function, name).map(signatureToString).mkString(", ")
   }
 
   /**
@@ -429,5 +430,17 @@ object UserDefinedFunctionUtils {
     val byteData = Base64.decodeBase64(data)
     InstantiationUtil
       .deserializeObject[UserDefinedFunction](byteData, Thread.currentThread.getContextClassLoader)
+  }
+
+  def getOperandTypeInfo(callBinding: SqlCallBinding): Seq[TypeInformation[_]] = {
+    val operandTypes = for (i <- 0 until callBinding.getOperandCount)
+      yield callBinding.getOperandType(i)
+    operandTypes.map { operandType =>
+      if (operandType.getSqlTypeName == SqlTypeName.NULL) {
+        null
+      } else {
+        FlinkTypeFactory.toTypeInfo(operandType)
+      }
+    }
   }
 }

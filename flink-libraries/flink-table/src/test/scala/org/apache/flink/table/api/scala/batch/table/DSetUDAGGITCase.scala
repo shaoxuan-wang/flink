@@ -106,7 +106,7 @@ class DSetUDAGGITCase(configMode: TableConfigMode)
   }
 
   @Test
-  def testUdaggGroupedAggregateSQL(): Unit = {
+  def testUdaggGroupedAllAggregateSQL(): Unit = {
 
     val env = ExecutionEnvironment.getExecutionEnvironment
     val tEnv = TableEnvironment.getTableEnvironment(env, config)
@@ -116,14 +116,14 @@ class DSetUDAGGITCase(configMode: TableConfigMode)
 
     tEnv.registerTable("T1", table)
     tEnv.registerFunction("countFun", new CountAggFunction)
-    tEnv.registerFunction("wAvgWithRetract", new WeightedAvgWithRetract)
+    tEnv.registerFunction("wAvgWithMergeAndReset", new WeightedAvgWithMergeAndReset)
     val sqlQuery =
-      "SELECT s, countFun(i), SUM(d)" +
+      "SELECT s, countFun(i), SUM(d), wAvgWithMergeAndReset(l,i), wAvgWithMergeAndReset(i,i)" +
         "FROM T1 " +
         "GROUP BY s"
 
     val results = tEnv.sql(sqlQuery).toDataSet[Row].collect()
-    val expected = "Hello,7,43.0\n" + "Hi,6,51.0\n"
+    val expected = "Hello,7,43.0,10023,10\n" + "Hi,6,51.0,9313,9\n"
     TestBaseUtils.compareResultAsText(results.asJava, expected)
   }
 }

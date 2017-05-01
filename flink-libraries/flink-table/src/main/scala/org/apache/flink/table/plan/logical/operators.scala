@@ -683,7 +683,7 @@ case class LogicalTableFunctionCall(
       failValidation(
         s"Given parameters of function '$functionName' do not match any signature. \n" +
           s"Actual: ${signatureToString(signature)} \n" +
-          s"Expected: ${signaturesToString(tableFunction)}")
+          s"Expected: ${signaturesToString(tableFunction, "eval")}")
     } else {
       node.evalMethod = foundMethod.get
     }

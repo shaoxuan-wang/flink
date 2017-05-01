@@ -294,7 +294,7 @@ case class ScalarFunctionCall(
     if (foundSignature.isEmpty) {
       ValidationFailure(s"Given parameters do not match any signature. \n" +
         s"Actual: ${signatureToString(signature)} \n" +
-        s"Expected: ${signaturesToString(scalarFunction)}")
+        s"Expected: ${signaturesToString(scalarFunction, "eval")}")
     } else {
       ValidationSuccess
     }

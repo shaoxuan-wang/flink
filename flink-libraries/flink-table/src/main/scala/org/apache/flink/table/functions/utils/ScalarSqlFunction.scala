@@ -23,12 +23,12 @@ import org.apache.calcite.sql._
 import org.apache.calcite.sql.`type`.SqlOperandTypeChecker.Consistency
 import org.apache.calcite.sql.`type`._
 import org.apache.calcite.sql.parser.SqlParserPos
-import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.ValidationException
 import org.apache.flink.table.calcite.FlinkTypeFactory
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.table.functions.utils.ScalarSqlFunction.{createOperandTypeChecker, createOperandTypeInference, createReturnTypeInference}
-import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getResultType, getEvalMethodSignature, getMethodSignatures, signatureToString, signaturesToString}
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getOperandTypeInfo,
+getResultType, getEvalMethodSignature, getMethodSignatures, signatureToString, signaturesToString}
 
 import scala.collection.JavaConverters._
 
@@ -82,7 +82,7 @@ object ScalarSqlFunction {
           throw new ValidationException(
             s"Given parameters of function '$name' do not match any signature. \n" +
               s"Actual: ${signatureToString(parameters)} \n" +
-              s"Expected: ${signaturesToString(scalarFunction)}")
+              s"Expected: ${signaturesToString(scalarFunction, "eval")}")
         }
         val resultType = getResultType(scalarFunction, foundSignature.get)
         val t = typeFactory.createTypeFromTypeInfo(resultType)
@@ -139,7 +139,7 @@ object ScalarSqlFunction {
       */
     new SqlOperandTypeChecker {
       override def getAllowedSignatures(op: SqlOperator, opName: String): String = {
-        s"$opName[${signaturesToString(scalarFunction)}]"
+        s"$opName[${signaturesToString(scalarFunction, "eval")}]"
       }
 
       override def getOperandCountRange: SqlOperandCountRange = {
@@ -170,7 +170,7 @@ object ScalarSqlFunction {
             throw new ValidationException(
               s"Given parameters of function '$name' do not match any signature. \n" +
                 s"Actual: ${signatureToString(operandTypeInfo)} \n" +
-                s"Expected: ${signaturesToString(scalarFunction)}")
+                s"Expected: ${signaturesToString(scalarFunction, "eval")}")
           } else {
             false
           }
@@ -183,18 +183,6 @@ object ScalarSqlFunction {
 
       override def getConsistency: Consistency = Consistency.NONE
 
-    }
-  }
-
-  private[flink] def getOperandTypeInfo(callBinding: SqlCallBinding): Seq[TypeInformation[_]] = {
-    val operandTypes = for (i <- 0 until callBinding.getOperandCount)
-      yield callBinding.getOperandType(i)
-    operandTypes.map { operandType =>
-      if (operandType.getSqlTypeName == SqlTypeName.NULL) {
-        null
-      } else {
-        FlinkTypeFactory.toTypeInfo(operandType)
-      }
     }
   }
 }

@@ -18,7 +18,7 @@
 
 package org.apache.flink.table.functions.utils
 
-import org.apache.calcite.rel.`type`.{RelDataType, RelDataTypeFactory}
+import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.sql._
 import org.apache.calcite.sql.`type`._
 import org.apache.calcite.sql.parser.SqlParserPos
@@ -26,40 +26,29 @@ import org.apache.calcite.sql.validate.SqlUserDefinedAggFunction
 import org.apache.flink.api.common.typeinfo._
 import org.apache.flink.table.api.ValidationException
 import org.apache.flink.table.calcite.FlinkTypeFactory
-import org.apache.calcite.schema.{AggregateFunction => CalciteAggFunction}
-import org.apache.flink.table.functions.utils.AggSqlFunctionObj.createOperandTypeInference
-import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getParameterTypes,
-getEvalMethodSignature, getAccumulateMethodSignature}
-import org.apache.flink.table.functions.{AggregateFunction, ScalarFunction}
+import org.apache.calcite.sql.`type`.SqlOperandTypeChecker.Consistency
+import org.apache.flink.table.functions.utils.AggSqlFunctionObj.{createOperandTypeInference, createReturnTypeInference, createOperandTypeChecker}
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
+import org.apache.flink.table.functions.AggregateFunction
 
 /**
   * say something here......
   */
 class AggSqlFunction(
-    val name: String,
-    val udaf: AggregateFunction[_,_],
-    val returnTypeInference: SqlReturnTypeInference,
-    val operandTypeInference: SqlOperandTypeInference,
-    val operandTypeChecker: SqlOperandTypeChecker,
+    name: String,
+    udaf: AggregateFunction[_, _],
     typeFactory: FlinkTypeFactory,
-    calciteAggFunction: CalciteAggFunction
-    )
+    returnType: TypeInformation[_])
   extends SqlUserDefinedAggFunction(
     new SqlIdentifier(name, SqlParserPos.ZERO),
-    returnTypeInference,
+    createReturnTypeInference(returnType, typeFactory),
     createOperandTypeInference(udaf, typeFactory),
-    operandTypeChecker,
-    calciteAggFunction) {
-//  extends SqlAggFunction(
-//    name,
-//    null,
-//    SqlKind.OTHER_FUNCTION,
-//    returnTypeInference,
-//    createOperandTypeInference(udaf, typeFactory),
-//    operandTypeChecker,
-//    SqlFunctionCategory.USER_DEFINED_FUNCTION,
-//    false,
-//    false) {
+    createOperandTypeChecker(udaf),
+    // We do not need to provide any calcite aggregateFunction here. Flink aggregateion function
+    // will be generated when translating the calcite relnode to flink runtime execution plan
+    null
+  ) {
+
   def getFunction: AggregateFunction[_, _] = udaf
 }
 
@@ -68,47 +57,17 @@ object AggSqlFunctionObj {
 
   def apply(
       name: String,
-      udaf: AggregateFunction[_,_],
+      udaf: AggregateFunction[_, _],
       returnType: TypeInformation[_],
       operandType: TypeInformation[_],
       typeFactory: FlinkTypeFactory): AggSqlFunction = {
 
-    val calciteAggFunction= new CalciteAggFunction {
-      override def getReturnType(typeFactory: RelDataTypeFactory) = null
-
-      override def getParameters = null
-    }
-
     new AggSqlFunction(
       name,
       udaf,
-      typeInfoToTypeInference(returnType, typeFactory),
-      null,
-      typeInfoToTypeChecker(Seq(operandType)),
       typeFactory,
-      calciteAggFunction
+      returnType
     )
-  }
-
-  //  private def methodReturnTypeToTypeInfo(method: Method): TypeInformation[_] ={
-  //    val ret = method.getReturnType
-  //    TypeInformation.of(ret)
-  //  }
-  //
-  //  private def methodParameterTypeToTypeInfo(method: Method) : Seq[TypeInformation[_]] = {
-  //    val operands = method.getParameterTypes
-  //    operands.map(o => TypeInformation.of(o))
-  //  }
-  private[flink] def getOperandTypeInfo(callBinding: SqlCallBinding): Seq[TypeInformation[_]] = {
-    val operandTypes = for (i <- 0 until callBinding.getOperandCount)
-      yield callBinding.getOperandType(i)
-    operandTypes.map { operandType =>
-      if (operandType.getSqlTypeName == SqlTypeName.NULL) {
-        null
-      } else {
-        FlinkTypeFactory.toTypeInfo(operandType)
-      }
-    }
   }
 
   private[flink] def createOperandTypeInference(
@@ -116,7 +75,7 @@ object AggSqlFunctionObj {
       typeFactory: FlinkTypeFactory)
   : SqlOperandTypeInference = {
     /**
-      * Operand type inference based on [[ScalarFunction]] given information.
+      * Operand type inference based on [[AggregateFunction]] given information.
       */
     new SqlOperandTypeInference {
       override def inferOperandTypes(
@@ -146,73 +105,75 @@ object AggSqlFunctionObj {
     }
   }
 
-  private def typeInfoToTypeChecker(
-      typeInfos: Seq[TypeInformation[_]]): SqlSingleOperandTypeChecker = {
-    val types: Seq[SqlTypeFamily] = typeInfos.map({
-      case o if o.isInstanceOf[NumericTypeInfo[_]] => SqlTypeFamily.NUMERIC
-      case BasicTypeInfo.STRING_TYPE_INFO => SqlTypeFamily.STRING
-      case BasicTypeInfo.DATE_TYPE_INFO | SqlTimeTypeInfo.DATE => SqlTypeFamily.DATETIME
-      case _ => SqlTypeFamily.ANY
-    })
-    OperandTypes.family(scala.collection.JavaConversions.seqAsJavaList(types))
-  }
-
-  private def typeInfoToTypeInference(
-      resultType: TypeInformation[_],
-      typeFactory: FlinkTypeFactory): SqlReturnTypeInference = {
-    resultType match {
-      case BasicTypeInfo.LONG_TYPE_INFO => ReturnTypes.BIGINT_NULLABLE
-      case BasicTypeInfo.STRING_TYPE_INFO => ReturnTypes.VARCHAR_2000
-      case ti if ti.isInstanceOf[IntegerTypeInfo[_]] => ReturnTypes.INTEGER_NULLABLE
-      case ti if ti.isInstanceOf[FractionalTypeInfo[_]] => ReturnTypes.DOUBLE_NULLABLE
-      case BasicTypeInfo.DATE_TYPE_INFO => ReturnTypes.DATE
-      case _ => createReturnTypeInference(resultType, typeFactory)
-      //        createReturnTypeInference(
-      //        aggFunction.getClass.getCanonicalName,
-      //        aggFunction,
-      //        typeFactory)
-      //throw new TableException(s"failed to infer type from $typeInfo")
-    }
-  }
-
   private[flink] def createReturnTypeInference(
       resultType: TypeInformation[_],
       typeFactory: FlinkTypeFactory)
   : SqlReturnTypeInference = {
-    /**
-      * Return type inference based on [[ScalarFunction]] given information.
-      */
+
     new SqlReturnTypeInference {
       override def inferReturnType(opBinding: SqlOperatorBinding): RelDataType = {
-        //        val parameters = opBinding
-        //          .collectOperandTypes()
-        //          .asScala
-        //          .map { operandType =>
-        //            if (operandType.getSqlTypeName == SqlTypeName.NULL) {
-        //              null
-        //            } else {
-        //              FlinkTypeFactory.toTypeInfo(operandType)
-        //            }
-        //          }
-        //        val accType = aggFunction.getClass.getMethod("createAccumulator").
-        //          getReturnType
-        //        accTypeList(index) = accType.getCanonicalName
-        //
-        //        val aggReturnType = aggFunction.getClass.getMethod("getValue", accType).
-        //          getReturnType
-        //        aggReturnTypeList(index) = aggReturnType.getCanonicalName
-        //
-        //        val foundSignature = getSignature("getValue", aggFunction, parameters)
-        //        if (foundSignature.isEmpty) {
-        //          throw new ValidationException(
-        //            s"Given parameters of function '$name' do not match any signature. \n" +
-        //              s"Actual: ${signatureToString(parameters)} \n" +
-        //              s"Expected: ${signaturesToString(aggFunction, "getValue")}")
-        //        }
-        //        val resultType = getResultTypeByName("getValue", aggFunction, foundSignature.get)
-
         typeFactory.createTypeFromTypeInfo(resultType)
       }
+    }
+  }
+
+  private[flink] def createOperandTypeChecker(aggregateFunction: AggregateFunction[_, _])
+  : SqlOperandTypeChecker = {
+
+    val signatures = getMethodSignatures(aggregateFunction, "accumulate")
+
+    /**
+      * Operand type checker based on [[AggregateFunction]] given information.
+      */
+    new SqlOperandTypeChecker {
+      override def getAllowedSignatures(op: SqlOperator, opName: String): String = {
+        s"$opName[${signaturesToString(aggregateFunction, "accumulate")}]"
+      }
+
+      override def getOperandCountRange: SqlOperandCountRange = {
+        var min = 255
+        var max = -1
+        signatures.foreach(
+          sig => {
+            val inputSig = sig.drop(1)
+            //do not count accumulator as input
+            var len = inputSig.length
+            if (len > 0 && inputSig(inputSig.length - 1).isArray) {
+              max = 254 // according to JVM spec 4.3.3
+              len = sig.length - 1
+            }
+            max = Math.max(len, max)
+            min = Math.min(len, min)
+          })
+        SqlOperandCountRanges.between(min, max)
+      }
+
+      override def checkOperandTypes(
+          callBinding: SqlCallBinding,
+          throwOnFailure: Boolean)
+      : Boolean = {
+        val operandTypeInfo = getOperandTypeInfo(callBinding)
+
+        val foundSignature = getAccumulateMethodSignature(aggregateFunction, operandTypeInfo)
+
+        if (foundSignature.isEmpty) {
+          if (throwOnFailure) {
+            throw new ValidationException(
+              s"Given parameters of function do not match any signature. \n" +
+                s"Actual: ${signatureToString(operandTypeInfo)} \n" +
+                s"Expected: ${signaturesToString(aggregateFunction, "accumulate")}")
+          } else {
+            false
+          }
+        } else {
+          true
+        }
+      }
+
+      override def isOptional(i: Int): Boolean = false
+
+      override def getConsistency: Consistency = Consistency.NONE
+
     }
   }
 }
