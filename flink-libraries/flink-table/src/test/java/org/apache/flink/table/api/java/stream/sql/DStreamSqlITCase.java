@@ -34,7 +34,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SqlITCase extends StreamingMultipleProgramsTestBase {
+public class DStreamSqlITCase extends StreamingMultipleProgramsTestBase {
 
 	@Test
 	public void testSelect() throws Exception {

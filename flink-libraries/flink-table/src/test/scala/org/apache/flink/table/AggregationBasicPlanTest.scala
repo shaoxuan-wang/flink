@@ -26,7 +26,7 @@ import org.junit.Test
 /**
   * Test for testing aggregate plans.
   */
-class AggregationTest extends TableTestBase {
+class AggregationBasicPlanTest extends TableTestBase {
 
   @Test
   def testAggregateQueryBatchSQL(): Unit = {

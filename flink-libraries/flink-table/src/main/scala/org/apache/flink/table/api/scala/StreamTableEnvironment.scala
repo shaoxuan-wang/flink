@@ -18,8 +18,8 @@
 package org.apache.flink.table.api.scala
 
 import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.table.api.{TableEnvironment, Table, TableConfig}
-import org.apache.flink.table.functions.TableFunction
+import org.apache.flink.table.api.{Table, TableConfig, TableEnvironment}
+import org.apache.flink.table.functions.{AggregateFunction, TableFunction}
 import org.apache.flink.table.expressions.Expression
 import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
 import org.apache.flink.streaming.api.scala.asScalaStream
@@ -151,5 +151,12 @@ class StreamTableEnvironment(
     */
   def registerFunction[T: TypeInformation](name: String, tf: TableFunction[T]): Unit = {
     registerTableFunctionInternal(name, tf)
+  }
+
+  def registerFunction[T: TypeInformation, ACC](
+      name: String,
+      tf: AggregateFunction[T, ACC])
+  : Unit = {
+    registerAggregateFunctionInternal[T, ACC](name, tf)
   }
 }

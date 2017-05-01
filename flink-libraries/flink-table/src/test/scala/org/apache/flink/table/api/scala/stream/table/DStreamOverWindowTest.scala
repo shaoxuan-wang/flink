@@ -24,7 +24,7 @@ import org.apache.flink.table.utils.TableTestUtil._
 import org.apache.flink.table.utils.{StreamTableTestUtil, TableTestBase}
 import org.junit.Test
 
-class OverWindowTest extends TableTestBase {
+class DStreamOverWindowTest extends TableTestBase {
   private val streamUtil: StreamTableTestUtil = streamTestUtil()
   val table: Table = streamUtil.addTable[(Int, String, Long)]("MyTable", 'a, 'b, 'c)
 
@@ -591,6 +591,6 @@ class OverWindowTest extends TableTestBase {
 
 }
 
-object OverWindowTest{
+object DStreamOverWindowTest{
   case class Pojo(id: Long, name: String)
 }

@@ -106,8 +106,12 @@ case class OverCall(
       .getTypeFactory.asInstanceOf[FlinkTypeFactory]
       .createTypeFromTypeInfo(agg.resultType)
 
-    val aggChildName = agg.asInstanceOf[Aggregation].child.asInstanceOf[ResolvedFieldReference].name
-    val aggExprs = List(relBuilder.field(aggChildName).asInstanceOf[RexNode]).asJava
+    // assemble exprs by agg children
+    val aggExprs = agg.asInstanceOf[Aggregation].children.map(_.toRexNode(relBuilder)).asJava
+
+//    val aggChildName = agg.asInstanceOf[Aggregation].children(0)
+//      .asInstanceOf[ResolvedFieldReference].name
+//    val aggExprs = List(relBuilder.field(aggChildName).asInstanceOf[RexNode]).asJava
 
     // assemble order by key
     val orderKey = orderBy match {
@@ -286,7 +290,7 @@ case class ScalarFunctionCall(
   override private[flink] def validateInput(): ValidationResult = {
     val signature = children.map(_.resultType)
     // look for a signature that matches the input types
-    foundSignature = getSignature(scalarFunction, signature)
+    foundSignature = getEvalMethodSignature(scalarFunction, signature)
     if (foundSignature.isEmpty) {
       ValidationFailure(s"Given parameters do not match any signature. \n" +
         s"Actual: ${signatureToString(signature)} \n" +

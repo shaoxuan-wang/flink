@@ -26,7 +26,7 @@ import org.apache.flink.table.utils.TableTestBase
 import org.apache.flink.table.utils.TableTestUtil._
 import org.junit.Test
 
-class GroupWindowTest extends TableTestBase {
+class DSetGroupWindowTest extends TableTestBase {
 
   //===============================================================================================
   // Common test

@@ -26,7 +26,7 @@ import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.table.api.TableEnvironment
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.api.scala.stream.table.OverWindowITCase.RowTimeSourceFunction
+import org.apache.flink.table.api.scala.stream.table.DStreamOverWindowITCase.RowTimeSourceFunction
 import org.apache.flink.table.api.scala.stream.utils.{StreamITCase, StreamingWithStateTestBase}
 import org.apache.flink.types.Row
 import org.junit.Assert._
@@ -34,7 +34,7 @@ import org.junit.Test
 
 import scala.collection.mutable
 
-class OverWindowITCase extends StreamingWithStateTestBase {
+class DStreamOverWindowITCase extends StreamingWithStateTestBase {
 
   @Test
   def testProcTimeUnBoundedPartitionedRowOver(): Unit = {
@@ -314,7 +314,7 @@ class OverWindowITCase extends StreamingWithStateTestBase {
   }
 }
 
-object OverWindowITCase {
+object DStreamOverWindowITCase {
 
   class RowTimeSourceFunction[T](
       dataWithTimestampList: Seq[Either[(Long, T), Long]]) extends SourceFunction[T] {

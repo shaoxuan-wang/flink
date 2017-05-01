@@ -35,7 +35,7 @@ import org.junit.runners.Parameterized
 import scala.collection.JavaConverters._
 
 @RunWith(classOf[Parameterized])
-class AggregationsITCase(
+class DSetAggregationsSqlITCase(
     configMode: TableConfigMode)
   extends TableProgramsCollectionTestBase(configMode) {
 

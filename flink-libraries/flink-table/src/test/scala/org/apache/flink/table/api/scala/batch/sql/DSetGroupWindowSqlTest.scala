@@ -28,7 +28,7 @@ import org.apache.flink.table.utils.TableTestBase
 import org.apache.flink.table.utils.TableTestUtil._
 import org.junit.Test
 
-class WindowAggregateTest extends TableTestBase {
+class DSetGroupWindowSqlTest extends TableTestBase {
 
   @Test
   def testNonPartitionedTumbleWindow(): Unit = {

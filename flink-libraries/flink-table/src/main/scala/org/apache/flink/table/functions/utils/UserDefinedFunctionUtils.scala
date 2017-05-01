@@ -31,7 +31,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.typeutils.TypeExtractor
 import org.apache.flink.table.calcite.FlinkTypeFactory
 import org.apache.flink.table.api.{TableEnvironment, ValidationException}
-import org.apache.flink.table.functions.{ScalarFunction, TableFunction, UserDefinedFunction}
+import org.apache.flink.table.functions.{ScalarFunction, TableFunction, UserDefinedFunction, AggregateFunction}
 import org.apache.flink.table.plan.schema.FlinkTableFunctionImpl
 import org.apache.flink.util.InstantiationUtil
 
@@ -74,45 +74,78 @@ object UserDefinedFunctionUtils {
     * Returns signatures matching the given signature of [[TypeInformation]].
     * Elements of the signature can be null (act as a wildcard).
     */
-  def getSignature(
-      function: UserDefinedFunction,
-      signature: Seq[TypeInformation[_]])
+  def getEvalMethodSignature(
+    function: UserDefinedFunction,
+    signature: Seq[TypeInformation[_]])
     : Option[Array[Class[_]]] = {
-    getEvalMethod(function, signature).map(_.getParameterTypes)
+    getUserDefinedMethod(function, "eval", typeInfoToClass(signature)).map(_.getParameterTypes)
+  }
+
+  def getAccumulateMethodSignature(
+      function: AggregateFunction[_, _],
+      signature: Seq[TypeInformation[_]])
+  : Option[Array[Class[_]]] = {
+    val accType = TypeExtractor.createTypeInfo(
+      function, classOf[AggregateFunction[_, _]], function.getClass, 1)
+    val input = Array(accType) ++ signature
+    getUserDefinedMethod(
+      function,
+      "accumulate",
+      typeInfoToClassArray(input)).map(_.getParameterTypes)
+  }
+
+  def getParameterTypes(
+      function: UserDefinedFunction,
+      signature: Array[Class[_]]): Array[TypeInformation[_]] = {
+    signature.map { c =>
+      try {
+        TypeExtractor.getForClass(c)
+      } catch {
+        case ite: InvalidTypesException =>
+          throw new ValidationException(
+            s"Parameter types of function '${function.getClass.getCanonicalName}' cannot be " +
+              s"automatically determined. Please provide type information manually.")
+      }
+    }
   }
 
   /**
-    * Returns eval method matching the given signature of [[TypeInformation]].
+    * Returns user defined method matching the given name and signature.
+    *
+    * @param function        function instance
+    * @param methodName      method name
+    * @param methodSignature an array of raw Java classes. We compare the raw Java classes not the
+    *                        TypeInformation. TypeInformation does not matter during runtime (e.g.
+    *                        within a MapFunction)
     */
-  def getEvalMethod(
+  def getUserDefinedMethod(
       function: UserDefinedFunction,
-      signature: Seq[TypeInformation[_]])
+      methodName: String,
+      methodSignature: Array[Class[_]])
     : Option[Method] = {
-    // We compare the raw Java classes not the TypeInformation.
-    // TypeInformation does not matter during runtime (e.g. within a MapFunction).
-    val actualSignature = typeInfoToClass(signature)
-    val evalMethods = checkAndExtractEvalMethods(function)
 
-    val filtered = evalMethods
-      // go over all eval methods and filter out matching methods
+    val methods = checkAndExtractMethods(function, methodName)
+
+    val filtered = methods
+      // go over all the methods and filter out matching methods
       .filter {
         case cur if !cur.isVarArgs =>
           val signatures = cur.getParameterTypes
           // match parameters of signature to actual parameters
-          actualSignature.length == signatures.length &&
+          methodSignature.length == signatures.length &&
             signatures.zipWithIndex.forall { case (clazz, i) =>
-              parameterTypeEquals(actualSignature(i), clazz)
+              parameterTypeEquals(methodSignature(i), clazz)
           }
         case cur if cur.isVarArgs =>
           val signatures = cur.getParameterTypes
-          actualSignature.zipWithIndex.forall {
+          methodSignature.zipWithIndex.forall {
             // non-varargs
             case (clazz, i) if i < signatures.length - 1  =>
               parameterTypeEquals(clazz, signatures(i))
             // varargs
             case (clazz, i) if i >= signatures.length - 1 =>
               parameterTypeEquals(clazz, signatures.last.getComponentType)
-          } || (actualSignature.isEmpty && signatures.length == 1) // empty varargs
+          } || (methodSignature.isEmpty && signatures.length == 1) // empty varargs
     }
 
     // if there is a fixed method, compiler will call this method preferentially
@@ -124,19 +157,21 @@ object UserDefinedFunctionUtils {
 
     // check if there is a Scala varargs annotation
     if (found.isEmpty &&
-      evalMethods.exists { evalMethod =>
-        val signatures = evalMethod.getParameterTypes
+      methods.exists { method =>
+        val signatures = method.getParameterTypes
         signatures.zipWithIndex.forall {
           case (clazz, i) if i < signatures.length - 1 =>
-            parameterTypeEquals(actualSignature(i), clazz)
+            parameterTypeEquals(methodSignature(i), clazz)
           case (clazz, i) if i == signatures.length - 1 =>
             clazz.getName.equals("scala.collection.Seq")
         }
       }) {
-      throw new ValidationException("Scala-style variable arguments in 'eval' methods are not " +
-        "supported. Please add a @scala.annotation.varargs annotation.")
+      throw new ValidationException(s"Scala-style variable arguments in '${methodName}' methods " +
+                                      s"are not supported. Please add a " +
+                                      s"@scala.annotation.varargs annotation.")
     } else if (found.length > 1) {
-      throw new ValidationException("Found multiple 'eval' methods which match the signature.")
+      throw new ValidationException("Found multiple '${methodName}' methods which match the " +
+                                      "signature.")
     }
     found.headOption
   }
@@ -155,16 +190,18 @@ object UserDefinedFunctionUtils {
   }
 
   /**
-    * Extracts "eval" methods and throws a [[ValidationException]] if no implementation
+    * Extracts methods and throws a [[ValidationException]] if no implementation
     * can be found, or implementation does not match the requirements.
     */
-  def checkAndExtractEvalMethods(function: UserDefinedFunction): Array[Method] = {
+  def checkAndExtractMethods(
+      function: UserDefinedFunction,
+      methodName: String): Array[Method] = {
     val methods = function
       .getClass
-      .getDeclaredMethods
+      .getMethods
       .filter { m =>
         val modifiers = m.getModifiers
-        m.getName == "eval" &&
+        m.getName == methodName &&
           Modifier.isPublic(modifiers) &&
           !Modifier.isAbstract(modifiers) &&
           !(function.isInstanceOf[TableFunction[_]] && Modifier.isStatic(modifiers))
@@ -173,15 +210,17 @@ object UserDefinedFunctionUtils {
     if (methods.isEmpty) {
       throw new ValidationException(
         s"Function class '${function.getClass.getCanonicalName}' does not implement at least " +
-          s"one method named 'eval' which is public, not abstract and " +
+          s"one method named '${methodName}' which is public, not abstract and " +
           s"(in case of table functions) not static.")
     }
 
     methods
   }
 
-  def getSignatures(function: UserDefinedFunction): Array[Array[Class[_]]] = {
-    checkAndExtractEvalMethods(function).map(_.getParameterTypes)
+  def getMethodSignatures(
+      function: UserDefinedFunction,
+      methodName: String): Array[Array[Class[_]]] = {
+    checkAndExtractMethods(function, methodName).map(_.getParameterTypes)
   }
 
   // ----------------------------------------------------------------------------------------------
@@ -220,11 +259,35 @@ object UserDefinedFunctionUtils {
       typeFactory: FlinkTypeFactory)
     : Seq[SqlFunction] = {
     val (fieldNames, fieldIndexes, _) = UserDefinedFunctionUtils.getFieldInfo(resultType)
-    val evalMethods = checkAndExtractEvalMethods(tableFunction)
+    val evalMethods = checkAndExtractMethods(tableFunction, "eval")
 
     evalMethods.map { method =>
       val function = new FlinkTableFunctionImpl(resultType, fieldIndexes, fieldNames, method)
       TableSqlFunction(name, tableFunction, resultType, typeFactory, function)
+    }
+  }
+
+  /**
+    * Create [[SqlFunction]]s for a [[AggregateFunction]]'s every eval method
+    *
+    * @param name function name
+    * @param aggFunction aggregate function
+    * @param resultType the type information of returned table
+    * @param typeFactory type factory
+    * @return the TableSqlFunction
+    */
+  def createAggregateSqlFunctions(
+      name: String,
+      aggFunction: AggregateFunction[_, _],
+      resultType: TypeInformation[_],
+      typeFactory: FlinkTypeFactory)
+  : Seq[SqlFunction] = {
+    val (fieldNames, fieldIndexes, _) = UserDefinedFunctionUtils.getFieldInfo(resultType)
+    val accumulateMethods = checkAndExtractMethods(aggFunction, "accumulate")
+
+    accumulateMethods.map { method =>
+//      val function = new FlinkTableFunctionImpl(resultType, fieldIndexes, fieldNames, method)
+      AggSqlFunctionObj(name, aggFunction, resultType, resultType, typeFactory)
     }
   }
 
@@ -241,7 +304,7 @@ object UserDefinedFunctionUtils {
       signature: Array[Class[_]])
     : TypeInformation[_] = {
     // find method for signature
-    val evalMethod = checkAndExtractEvalMethods(function)
+    val evalMethod = checkAndExtractMethods(function, "eval")
       .find(m => signature.sameElements(m.getParameterTypes))
       .getOrElse(throw new ValidationException("Given signature is invalid."))
 
@@ -268,7 +331,7 @@ object UserDefinedFunctionUtils {
       signature: Array[Class[_]])
     : Class[_] = {
     // find method for signature
-    val evalMethod = checkAndExtractEvalMethods(function)
+    val evalMethod = checkAndExtractMethods(function, "eval")
       .find(m => signature.sameElements(m.getParameterTypes))
       .getOrElse(throw new IllegalArgumentException("Given signature is invalid."))
     evalMethod.getReturnType
@@ -318,13 +381,13 @@ object UserDefinedFunctionUtils {
     * Prints all eval methods signatures of a class.
     */
   def signaturesToString(function: UserDefinedFunction): String = {
-    getSignatures(function).map(signatureToString).mkString(", ")
+    getMethodSignatures(function, "eval").map(signatureToString).mkString(", ")
   }
 
   /**
     * Extracts type classes of [[TypeInformation]] in a null-aware way.
     */
-  private def typeInfoToClass(typeInfos: Seq[TypeInformation[_]]): Array[Class[_]] =
+  def typeInfoToClass(typeInfos: Seq[TypeInformation[_]]): Array[Class[_]] =
   typeInfos.map { typeInfo =>
     if (typeInfo == null) {
       null
@@ -332,6 +395,15 @@ object UserDefinedFunctionUtils {
       typeInfo.getTypeClass
     }
   }.toArray
+
+  private def typeInfoToClassArray(typeInfos: Array[TypeInformation[_]]): Array[Class[_]] =
+    typeInfos.map { typeInfo =>
+      if (typeInfo == null) {
+        null
+      } else {
+        typeInfo.getTypeClass
+      }
+    }
 
   /**
     * Compares parameter candidate classes with expected classes. If true, the parameters match.

@@ -28,7 +28,7 @@ import org.apache.flink.table.utils.TableTestBase
 import org.apache.flink.table.utils.TableTestUtil.{streamTableNode, term, unaryNode}
 import org.junit.{Ignore, Test}
 
-class GroupWindowTest extends TableTestBase {
+class DStreamGroupWindowTest extends TableTestBase {
 
   @Test(expected = classOf[ValidationException])
   def testInvalidWindowProperty(): Unit = {

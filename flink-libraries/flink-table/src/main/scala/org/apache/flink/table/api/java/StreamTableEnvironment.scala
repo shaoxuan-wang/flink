@@ -20,7 +20,7 @@ package org.apache.flink.table.api.java
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.typeutils.TypeExtractor
 import org.apache.flink.table.api._
-import org.apache.flink.table.functions.TableFunction
+import org.apache.flink.table.functions.{AggregateFunction, TableFunction}
 import org.apache.flink.table.expressions.ExpressionParser
 import org.apache.flink.streaming.api.datastream.DataStream
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment
@@ -179,5 +179,16 @@ class StreamTableEnvironment(
       .asInstanceOf[TypeInformation[T]]
 
     registerTableFunctionInternal[T](name, tf)
+  }
+
+  def registerFunction[T, ACC](
+      name: String,
+      tf: AggregateFunction[T, ACC])
+  : Unit = {
+    implicit val typeInfo: TypeInformation[T] = TypeExtractor
+      .createTypeInfo(tf, classOf[TableFunction[_]], tf.getClass, 0)
+      .asInstanceOf[TypeInformation[T]]
+
+    registerAggregateFunctionInternal[T, ACC](name, tf)
   }
 }

@@ -21,7 +21,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api._
 import org.apache.flink.table.expressions.Expression
-import org.apache.flink.table.functions.TableFunction
+import org.apache.flink.table.functions.{AggregateFunction, TableFunction}
 
 import _root_.scala.reflect.ClassTag
 
@@ -150,5 +150,12 @@ class BatchTableEnvironment(
     */
   def registerFunction[T: TypeInformation](name: String, tf: TableFunction[T]): Unit = {
     registerTableFunctionInternal(name, tf)
+  }
+
+  def registerFunction[T: TypeInformation, ACC](
+      name: String,
+      tf: AggregateFunction[T, ACC])
+  : Unit = {
+    registerAggregateFunctionInternal[T, ACC](name, tf)
   }
 }

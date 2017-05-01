@@ -28,7 +28,7 @@ import org.apache.flink.table.api.ValidationException
 import org.apache.flink.table.calcite.FlinkTypeFactory
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.table.functions.utils.ScalarSqlFunction.{createOperandTypeChecker, createOperandTypeInference, createReturnTypeInference}
-import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getResultType, getSignature, getSignatures, signatureToString, signaturesToString}
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getResultType, getEvalMethodSignature, getMethodSignatures, signatureToString, signaturesToString}
 
 import scala.collection.JavaConverters._
 
@@ -77,7 +77,7 @@ object ScalarSqlFunction {
               FlinkTypeFactory.toTypeInfo(operandType)
             }
           }
-        val foundSignature = getSignature(scalarFunction, parameters)
+        val foundSignature = getEvalMethodSignature(scalarFunction, parameters)
         if (foundSignature.isEmpty) {
           throw new ValidationException(
             s"Given parameters of function '$name' do not match any signature. \n" +
@@ -106,7 +106,7 @@ object ScalarSqlFunction {
 
         val operandTypeInfo = getOperandTypeInfo(callBinding)
 
-        val foundSignature = getSignature(scalarFunction, operandTypeInfo)
+        val foundSignature = getEvalMethodSignature(scalarFunction, operandTypeInfo)
           .getOrElse(throw new ValidationException(s"Operand types of could not be inferred."))
 
         val inferredTypes = scalarFunction
@@ -132,7 +132,7 @@ object ScalarSqlFunction {
       scalarFunction: ScalarFunction)
     : SqlOperandTypeChecker = {
 
-    val signatures = getSignatures(scalarFunction)
+    val signatures = getMethodSignatures(scalarFunction, "eval")
 
     /**
       * Operand type checker based on [[ScalarFunction]] given information.
@@ -163,7 +163,7 @@ object ScalarSqlFunction {
         : Boolean = {
         val operandTypeInfo = getOperandTypeInfo(callBinding)
 
-        val foundSignature = getSignature(scalarFunction, operandTypeInfo)
+        val foundSignature = getEvalMethodSignature(scalarFunction, operandTypeInfo)
 
         if (foundSignature.isEmpty) {
           if (throwOnFailure) {

@@ -19,7 +19,7 @@
 package org.apache.flink.table.api.scala.stream.sql
 
 import org.apache.flink.api.scala._
-import org.apache.flink.table.api.scala.stream.sql.SqlITCase.EventTimeSourceFunction
+import org.apache.flink.table.api.scala.stream.sql.DStreamSqlITCase.EventTimeSourceFunction
 import org.apache.flink.streaming.api.functions.source.SourceFunction
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.watermark.Watermark
@@ -31,10 +31,11 @@ import org.junit.Assert._
 import org.junit._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext
+import org.apache.flink.table.functions.aggfunctions.CountAggFunction
 
 import scala.collection.mutable
 
-class SqlITCase extends StreamingWithStateTestBase {
+class DStreamSqlITCase extends StreamingWithStateTestBase {
 
   val data = List(
     (1L, 1, "Hello"),
@@ -201,9 +202,11 @@ class SqlITCase extends StreamingWithStateTestBase {
 
     tEnv.registerTable("T1", t1)
 
+    tEnv.registerFunction("Func0", new CountAggFunction)
+
     val sqlQuery = "SELECT " +
       "c, " +
-      "count(a) OVER (PARTITION BY c ORDER BY ProcTime()  RANGE UNBOUNDED preceding) as cnt1, " +
+      "Func0(a) OVER (PARTITION BY c ORDER BY ProcTime()  RANGE UNBOUNDED preceding) as cnt1, " +
       "sum(a) OVER (PARTITION BY c ORDER BY ProcTime() RANGE UNBOUNDED preceding) as cnt2 " +
       "from T1"
 
@@ -1142,7 +1145,7 @@ class SqlITCase extends StreamingWithStateTestBase {
 
 }
 
-object SqlITCase {
+object DStreamSqlITCase {
 
   class EventTimeSourceFunction[T](
       dataWithTimestampList: Seq[Either[(Long, T), Long]]) extends SourceFunction[T] {
