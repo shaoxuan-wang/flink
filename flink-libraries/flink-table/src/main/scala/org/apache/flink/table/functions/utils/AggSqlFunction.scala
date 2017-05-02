@@ -21,53 +21,51 @@ package org.apache.flink.table.functions.utils
 import org.apache.calcite.rel.`type`.RelDataType
 import org.apache.calcite.sql._
 import org.apache.calcite.sql.`type`._
+import org.apache.calcite.sql.`type`.SqlOperandTypeChecker.Consistency
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.sql.validate.SqlUserDefinedAggFunction
 import org.apache.flink.api.common.typeinfo._
 import org.apache.flink.table.api.ValidationException
 import org.apache.flink.table.calcite.FlinkTypeFactory
-import org.apache.calcite.sql.`type`.SqlOperandTypeChecker.Consistency
-import org.apache.flink.table.functions.utils.AggSqlFunctionObj.{createOperandTypeInference, createReturnTypeInference, createOperandTypeChecker}
-import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
 import org.apache.flink.table.functions.AggregateFunction
+import org.apache.flink.table.functions.utils.AggSqlFunction.{createOperandTypeChecker, createOperandTypeInference, createReturnTypeInference}
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils._
 
 /**
-  * say something here......
+  * Calcite wrapper for user-defined aggregate functions.
+  *
+  * @param name function name (used by SQL parser)
+  * @param aggregateFunction aggregate function to be called
+  * @param returnType the type information of returned value
+  * @param typeFactory type factory for converting Flink's between Calcite's types
   */
 class AggSqlFunction(
     name: String,
-    udaf: AggregateFunction[_, _],
-    typeFactory: FlinkTypeFactory,
-    returnType: TypeInformation[_])
+    aggregateFunction: AggregateFunction[_, _],
+    returnType: TypeInformation[_],
+    typeFactory: FlinkTypeFactory)
   extends SqlUserDefinedAggFunction(
     new SqlIdentifier(name, SqlParserPos.ZERO),
     createReturnTypeInference(returnType, typeFactory),
-    createOperandTypeInference(udaf, typeFactory),
-    createOperandTypeChecker(udaf),
+    createOperandTypeInference(aggregateFunction, typeFactory),
+    createOperandTypeChecker(aggregateFunction),
     // We do not need to provide any calcite aggregateFunction here. Flink aggregateion function
     // will be generated when translating the calcite relnode to flink runtime execution plan
     null
   ) {
 
-  def getFunction: AggregateFunction[_, _] = udaf
+  def getFunction: AggregateFunction[_, _] = aggregateFunction
 }
 
-// static helper functions
-object AggSqlFunctionObj {
+object AggSqlFunction {
 
   def apply(
       name: String,
-      udaf: AggregateFunction[_, _],
+      aggregateFunction: AggregateFunction[_, _],
       returnType: TypeInformation[_],
-      operandType: TypeInformation[_],
       typeFactory: FlinkTypeFactory): AggSqlFunction = {
 
-    new AggSqlFunction(
-      name,
-      udaf,
-      typeFactory,
-      returnType
-    )
+    new AggSqlFunction(name, aggregateFunction, returnType, typeFactory)
   }
 
   private[flink] def createOperandTypeInference(

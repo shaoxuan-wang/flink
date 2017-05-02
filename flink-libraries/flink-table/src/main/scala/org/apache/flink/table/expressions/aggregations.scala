@@ -23,15 +23,15 @@ import org.apache.calcite.sql.fun._
 import org.apache.calcite.sql.SqlKind._
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilder.AggCall
-import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
+import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.TableException
-import org.apache.flink.table.calcite.FlinkTypeFactory
 import org.apache.flink.table.functions.AggregateFunction
-import org.apache.flink.table.functions.utils.AggSqlFunctionObj
+import org.apache.flink.table.functions.utils.AggSqlFunction
 import org.apache.flink.table.typeutils.TypeCheckUtils
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo
 import org.apache.flink.table.calcite.FlinkTypeFactory
-import org.apache.flink.table.validate.{ValidationResult, ValidationSuccess}
+import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getAccumulateMethodSignature, signatureToString, signaturesToString}
+import org.apache.flink.table.validate.{ValidationFailure, ValidationResult, ValidationSuccess}
 
 abstract sealed class Aggregation extends Expression {
 
@@ -143,56 +143,50 @@ case class Avg(child: Expression) extends Aggregation {
 }
 
 case class UDAGGFunctionCall[T: TypeInformation, ACC](
-    udagg: AggregateFunction[T, ACC],
+    aggregateFunction: AggregateFunction[T, ACC],
     args: Seq[Expression])
   extends Aggregation {
 
   override private[flink] def children: Seq[Expression] = args
 
   // Override makeCopy method in TreeNode, to produce vargars properly
-  override def makeCopy(newArgs: Array[AnyRef]): this.type = {
-    if (newArgs.length < 1) {
+  override def makeCopy(args: Array[AnyRef]): this.type = {
+    if (args.length < 1) {
       throw new TableException("Invalid constructor params")
     }
-    val udaggParam = newArgs.head.asInstanceOf[AggregateFunction[T, ACC]]
-    val newArg = newArgs.last.asInstanceOf[Seq[Expression]]
-    new UDAGGFunctionCall(udaggParam, newArg).asInstanceOf[this.type]
+    val agg = args.head.asInstanceOf[AggregateFunction[T, ACC]]
+    val arg = args.last.asInstanceOf[Seq[Expression]]
+    new UDAGGFunctionCall(agg, arg).asInstanceOf[this.type]
   }
 
-  //  val AccType = udagg.getClass.
-  //    getGenericSuperclass.asInstanceOf[ParameterizedTypeImpl].getActualTypeArguments()(1)
-  //    .asInstanceOf[Class[_]]
-  //  val returnType = udagg.getClass.getMethod("getValue", AccType).getReturnType
-  //  override def resultType: TypeInformation[_] = TypeExtractor.createTypeInfo(returnType)
   override def resultType: TypeInformation[_] = implicitly[TypeInformation[T]]
 
   override def validateInput(): ValidationResult = {
-    //这里需要加入valid accumulate等方法的函数
-    val signiture = children.map(_.resultType)
-
-    ValidationSuccess
-    //    if (isTypeMatch(Seq(resultType), Seq(child.resultType), isVarArgs = false)) {
-    //      ValidationSuccess
-    //    } else {
-    //      val inputType = child.resultType.getTypeClass.getSimpleName
-    //      val operandType = resultType.getTypeClass.getSimpleName
-    //      val udafName = udagg.getClass.getSimpleName
-    //      ValidationFailure(
-    //        s"Cannot apply '$udafName' to arguments of type '$udafName(<$inputType>)'." +
-    //          s" Supported form(s): '$udafName(<$operandType>)'")
-    //    }
+    val signature = children.map(_.resultType)
+    // look for a signature that matches the input types
+    val foundSignature = getAccumulateMethodSignature(aggregateFunction, signature)
+    if (foundSignature.isEmpty) {
+      ValidationFailure(s"Given parameters do not match any signature. \n" +
+                          s"Actual: ${signatureToString(signature)} \n" +
+                          s"Expected: ${signaturesToString(aggregateFunction, "accumulate")}")
+    } else {
+      ValidationSuccess
+    }
   }
 
-  override def toString(): String = s"${udagg.getClass.getSimpleName}($args)"
+  override def toString(): String = s"${aggregateFunction.getClass.getSimpleName}($args)"
 
   override def toAggCall(name: String)(implicit relBuilder: RelBuilder): AggCall = {
     val typeFactory = relBuilder.getTypeFactory.asInstanceOf[FlinkTypeFactory]
-    val sqlFunction = AggSqlFunctionObj(name, udagg, resultType, resultType, typeFactory)
+    val sqlFunction = AggSqlFunction(name, aggregateFunction, resultType, typeFactory)
     relBuilder.aggregateCall(sqlFunction, false, null, name, args.map(_.toRexNode): _*)
   }
 
   override private[flink] def getSqlAggFunction()(implicit relBuilder: RelBuilder) = {
     val typeFactory = relBuilder.getTypeFactory.asInstanceOf[FlinkTypeFactory]
-    AggSqlFunctionObj("UDAGG", udagg, resultType, resultType, typeFactory)
+    AggSqlFunction("UDAGG", // tableAPI parser does not really use this
+                   aggregateFunction,
+                   resultType,
+                   typeFactory)
   }
 }

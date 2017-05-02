@@ -369,7 +369,7 @@ abstract class TableEnvironment(val config: TableConfig) {
 
     // register in SQL API
     val sqlFunctions = createAggregateSqlFunctions(name, function, typeInfo, typeFactory)
-    functionCatalog.registerSqlFunctions(sqlFunctions)
+    functionCatalog.registerSqlFunction(sqlFunctions)
   }
 
   /**

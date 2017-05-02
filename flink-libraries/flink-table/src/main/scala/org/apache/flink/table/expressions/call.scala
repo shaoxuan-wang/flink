@@ -109,10 +109,6 @@ case class OverCall(
     // assemble exprs by agg children
     val aggExprs = agg.asInstanceOf[Aggregation].children.map(_.toRexNode(relBuilder)).asJava
 
-//    val aggChildName = agg.asInstanceOf[Aggregation].children(0)
-//      .asInstanceOf[ResolvedFieldReference].name
-//    val aggExprs = List(relBuilder.field(aggChildName).asInstanceOf[RexNode]).asJava
-
     // assemble order by key
     val orderKey = orderBy match {
       case _: RowTime =>

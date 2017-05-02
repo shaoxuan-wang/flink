@@ -269,11 +269,11 @@ object UserDefinedFunctionUtils {
   }
 
   /**
-    * Create [[SqlFunction]]s for a [[AggregateFunction]]'s every eval method
+    * Create [[SqlFunction]]s for an [[AggregateFunction]]
     *
     * @param name function name
     * @param aggFunction aggregate function
-    * @param resultType the type information of returned table
+    * @param resultType the type information of returned value
     * @param typeFactory type factory
     * @return the TableSqlFunction
     */
@@ -282,14 +282,9 @@ object UserDefinedFunctionUtils {
       aggFunction: AggregateFunction[_, _],
       resultType: TypeInformation[_],
       typeFactory: FlinkTypeFactory)
-  : Seq[SqlFunction] = {
-    val (fieldNames, fieldIndexes, _) = UserDefinedFunctionUtils.getFieldInfo(resultType)
-    val accumulateMethods = checkAndExtractMethods(aggFunction, "accumulate")
-
-    accumulateMethods.map { method =>
-//      val function = new FlinkTableFunctionImpl(resultType, fieldIndexes, fieldNames, method)
-      AggSqlFunctionObj(name, aggFunction, resultType, resultType, typeFactory)
-    }
+  : SqlFunction = {
+    checkAndExtractMethods(aggFunction, "accumulate")
+    AggSqlFunction(name, aggFunction, resultType, typeFactory)
   }
 
   // ----------------------------------------------------------------------------------------------
