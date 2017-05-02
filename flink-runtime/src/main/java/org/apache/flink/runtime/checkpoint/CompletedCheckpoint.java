@@ -18,20 +18,24 @@
 
 package org.apache.flink.runtime.checkpoint;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateUtil;
 import org.apache.flink.runtime.state.StreamStateHandle;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -89,11 +93,14 @@ public class CompletedCheckpoint implements Serializable {
 	/** The duration of the checkpoint (completion timestamp - trigger timestamp). */
 	private final long duration;
 
-	/** States of the different task groups belonging to this checkpoint */
-	private final Map<JobVertexID, TaskState> taskStates;
+	/** States of the different operator groups belonging to this checkpoint */
+	private final Map<OperatorID, OperatorState> operatorStates;
 
 	/** Properties for this checkpoint. */
 	private final CheckpointProperties props;
+
+	/** States that were created by a hook on the master (in the checkpoint coordinator) */
+	private final Collection<MasterState> masterHookStates;
 
 	/** The state handle to the externalized meta data, if the metadata has been externalized */
 	@Nullable
@@ -109,35 +116,13 @@ public class CompletedCheckpoint implements Serializable {
 
 	// ------------------------------------------------------------------------
 
-	@VisibleForTesting
-	CompletedCheckpoint(
-			JobID job,
-			long checkpointID,
-			long timestamp,
-			long completionTimestamp,
-			Map<JobVertexID, TaskState> taskStates) {
-
-		this(job, checkpointID, timestamp, completionTimestamp, taskStates,
-				CheckpointProperties.forStandardCheckpoint());
-	}
-
 	public CompletedCheckpoint(
 			JobID job,
 			long checkpointID,
 			long timestamp,
 			long completionTimestamp,
-			Map<JobVertexID, TaskState> taskStates,
-			CheckpointProperties props) {
-
-		this(job, checkpointID, timestamp, completionTimestamp, taskStates, props, null, null);
-	}
-
-	public CompletedCheckpoint(
-			JobID job,
-			long checkpointID,
-			long timestamp,
-			long completionTimestamp,
-			Map<JobVertexID, TaskState> taskStates,
+			Map<OperatorID, OperatorState> operatorStates,
+			@Nullable Collection<MasterState> masterHookStates,
 			CheckpointProperties props,
 			@Nullable StreamStateHandle externalizedMetadata,
 			@Nullable String externalPointer) {
@@ -156,7 +141,14 @@ public class CompletedCheckpoint implements Serializable {
 		this.checkpointID = checkpointID;
 		this.timestamp = timestamp;
 		this.duration = completionTimestamp - timestamp;
-		this.taskStates = checkNotNull(taskStates);
+
+		// we create copies here, to make sure we have no shared mutable
+		// data structure with the "outside world"
+		this.operatorStates = new HashMap<>(checkNotNull(operatorStates));
+		this.masterHookStates = masterHookStates == null || masterHookStates.isEmpty() ?
+				Collections.<MasterState>emptyList() :
+				new ArrayList<>(masterHookStates);
+
 		this.props = checkNotNull(props);
 		this.externalizedMetadata = externalizedMetadata;
 		this.externalPointer = externalPointer;
@@ -220,19 +212,19 @@ public class CompletedCheckpoint implements Serializable {
 	public long getStateSize() {
 		long result = 0L;
 
-		for (TaskState taskState : taskStates.values()) {
-			result += taskState.getStateSize();
+		for (OperatorState operatorState : operatorStates.values()) {
+			result += operatorState.getStateSize();
 		}
 
 		return result;
 	}
 
-	public Map<JobVertexID, TaskState> getTaskStates() {
-		return taskStates;
+	public Map<OperatorID, OperatorState> getOperatorStates() {
+		return operatorStates;
 	}
 
-	public TaskState getTaskState(JobVertexID jobVertexID) {
-		return taskStates.get(jobVertexID);
+	public Collection<MasterState> getMasterHookStates() {
+		return Collections.unmodifiableCollection(masterHookStates);
 	}
 
 	public boolean isExternalized() {
@@ -265,7 +257,7 @@ public class CompletedCheckpoint implements Serializable {
 	 * @param sharedStateRegistry The registry where shared states are registered
 	 */
 	public void registerSharedStates(SharedStateRegistry sharedStateRegistry) {
-		sharedStateRegistry.registerAll(taskStates.values());
+		sharedStateRegistry.registerAll(operatorStates.values());
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -315,7 +307,7 @@ public class CompletedCheckpoint implements Serializable {
 		protected void doDiscardPrivateState() {
 			// discard private state objects
 			try {
-				StateUtil.bestEffortDiscardAllStateObjects(taskStates.values());
+				StateUtil.bestEffortDiscardAllStateObjects(operatorStates.values());
 			} catch (Exception e) {
 				storedException = ExceptionUtils.firstOrSuppressed(e, storedException);
 			}
@@ -330,7 +322,7 @@ public class CompletedCheckpoint implements Serializable {
 		}
 
 		protected void clearTaskStatesAndNotifyDiscardCompleted() {
-			taskStates.clear();
+			operatorStates.clear();
 			// to be null-pointer safe, copy reference to stack
 			CompletedCheckpointStats.DiscardCallback discardCallback =
 				CompletedCheckpoint.this.discardCallback;
@@ -369,7 +361,7 @@ public class CompletedCheckpoint implements Serializable {
 
 		@Override
 		protected void doDiscardSharedState() {
-			sharedStateRegistry.unregisterAll(taskStates.values());
+			sharedStateRegistry.unregisterAll(operatorStates.values());
 		}
 	}
 }
