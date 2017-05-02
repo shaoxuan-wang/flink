@@ -20,18 +20,23 @@ package org.apache.flink.table.api.scala.batch.table
 
 import java.math.BigDecimal
 
+import org.apache.flink.api.java.{DataSet => JDataSet, ExecutionEnvironment => JavaExecutionEnv}
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
-import org.apache.flink.table.api.java.utils.UserDefinedAggFunctions.WeightedAvgWithMergeAndReset
+import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment => ScalaExecutionEnv}
+import org.apache.flink.table.api.java.utils.UserDefinedAggFunctions.{WeightedAvg, WeightedAvgWithMergeAndReset}
 import org.apache.flink.table.api.scala.batch.utils.TableProgramsCollectionTestBase
 import org.apache.flink.table.api.scala.batch.utils.TableProgramsTestBase.TableConfigMode
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.api.TableEnvironment
+import org.apache.flink.table.api.{TableEnvironment, Types}
 import org.apache.flink.table.functions.aggfunctions.CountAggFunction
+import org.apache.flink.table.utils.TableTestBase
 import org.apache.flink.test.util.TestBaseUtils
 import org.apache.flink.types.Row
 import org.junit._
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
+import org.mockito.Mockito.{mock, when}
 
 import scala.collection.JavaConverters._
 
@@ -129,5 +134,44 @@ class DSetUDAGGITCase(configMode: TableConfigMode)
     val results = tEnv.sql(sqlQuery).toDataSet[Row].collect()
     val expected = "Hello,7,43.0,10023,10\n" + "Hi,6,51.0,9313,9\n"
     TestBaseUtils.compareResultAsText(results.asJava, expected)
+  }
+
+  @Test
+  def testUdaggJavaAPI(): Unit = {
+    // mock
+    val ds = mock(classOf[DataSet[Row]])
+    val jDs = mock(classOf[JDataSet[Row]])
+    val typeInfo = new RowTypeInfo(Seq(Types.INT, Types.LONG, Types.STRING): _*)
+    when(ds.javaSet).thenReturn(jDs)
+    when(jDs.getType).thenReturn(typeInfo)
+
+    // Scala environment
+    val env = mock(classOf[ScalaExecutionEnv])
+    val tableEnv = TableEnvironment.getTableEnvironment(env)
+    val in1 = ds.toTable(tableEnv).as("int, long, string")
+
+    // Java environment
+    val javaEnv = mock(classOf[JavaExecutionEnv])
+    val javaTableEnv = TableEnvironment.getTableEnvironment(javaEnv)
+    val in2 = javaTableEnv.fromDataSet(jDs).as("int, long, string")
+
+    // Java API
+    javaTableEnv.registerFunction("myCountFun", new CountAggFunction)
+    javaTableEnv.registerFunction("weightAvgFun", new WeightedAvg)
+    var javaTable = in2
+      .groupBy("string")
+      .select("string, myCountFun(string), int.sum, weightAvgFun(long, int), " +
+                "weightAvgFun(int, int)")
+
+    // Scala API
+    val myCountFun = new CountAggFunction
+    val weightAvgFun = new WeightedAvg
+    var scalaTable = in1
+      .groupBy('string)
+      .select('string, myCountFun('string), 'int.sum, weightAvgFun('long, 'int),
+              weightAvgFun('int, 'int))
+
+    val helper = new TableTestBase
+    helper.verifyTableEquals(scalaTable, javaTable)
   }
 }

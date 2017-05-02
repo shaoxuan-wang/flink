@@ -31,6 +31,6 @@ case class UDAGGExpression[T: TypeInformation, ACC](aggregateFunction: Aggregate
     * @param params actual parameters of function
     * @return a [[UDAGGFunctionCall]]
     */
-  def apply(params: Expression*): UDAGGFunctionCall[T, ACC] =
-    UDAGGFunctionCall[T, ACC](aggregateFunction, params)
+  def apply(params: Expression*): UDAGGFunctionCall =
+    UDAGGFunctionCall(aggregateFunction, params)
 }

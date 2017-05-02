@@ -195,7 +195,7 @@ class StreamTableEnvironment(
       f: AggregateFunction[T, ACC])
   : Unit = {
     implicit val typeInfo: TypeInformation[T] = TypeExtractor
-      .createTypeInfo(f, classOf[TableFunction[_]], f.getClass, 0)
+      .createTypeInfo(f, classOf[AggregateFunction[_, _]], f.getClass, 0)
       .asInstanceOf[TypeInformation[T]]
 
     registerAggregateFunctionInternal[T, ACC](name, f)

@@ -20,21 +20,27 @@ package org.apache.flink.table.api.scala.stream.table
 
 import java.math.BigDecimal
 
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks
 import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.TimeCharacteristic
+import org.apache.flink.table.utils.TableTestBase
+import org.apache.flink.streaming.api.datastream.{DataStream => JDataStream}
+import org.apache.flink.streaming.api.environment.{StreamExecutionEnvironment => JavaExecutionEnv}
+import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment => ScalaExecutionEnv}
 import org.apache.flink.streaming.api.watermark.Watermark
 import org.apache.flink.table.api.java.utils.UserDefinedAggFunctions.{WeightedAvg, WeightedAvgWithMerge, WeightedAvgWithRetract}
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.scala.stream.table.DStreamUDAGGITCase.TimestampAndWatermarkWithOffset
 import org.apache.flink.table.api.scala.stream.utils.StreamITCase
-import org.apache.flink.table.api.TableEnvironment
+import org.apache.flink.table.api.{SlidingWindow, TableEnvironment, Types}
 import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase
 import org.apache.flink.table.functions.aggfunctions.CountAggFunction
 import org.apache.flink.types.Row
 import org.junit.Assert._
 import org.junit.Test
+import org.mockito.Mockito.{mock, when}
 
 import scala.collection.mutable
 
@@ -224,6 +230,44 @@ class DStreamUDAGGITCase extends StreamingMultipleProgramsTestBase {
     val expected = Seq(
       "Hello,4,10.0", "Hi,3,18.0", "Hello,2,17.0", "Hi,3,33.0", "Hello,1,16.0")
     assertEquals(expected, StreamITCase.testResults)
+  }
+
+  @Test
+  def testUdaggJavaAPI(): Unit = {
+    // mock
+    val ds = mock(classOf[DataStream[Row]])
+    val jDs = mock(classOf[JDataStream[Row]])
+    val typeInfo = new RowTypeInfo(Seq(Types.INT, Types.LONG, Types.STRING): _*)
+    when(ds.javaStream).thenReturn(jDs)
+    when(jDs.getType).thenReturn(typeInfo)
+    // Scala environment
+    val env = mock(classOf[ScalaExecutionEnv])
+    val tableEnv = TableEnvironment.getTableEnvironment(env)
+    val in1 = ds.toTable(tableEnv).as('int, 'long, 'string)
+
+    // Java environment
+    val javaEnv = mock(classOf[JavaExecutionEnv])
+    val javaTableEnv = TableEnvironment.getTableEnvironment(javaEnv)
+    val in2 = javaTableEnv.fromDataStream(jDs).as("int, long, string")
+
+    // Java API
+    javaTableEnv.registerFunction("myCountFun", new CountAggFunction)
+    javaTableEnv.registerFunction("weightAvgFun", new WeightedAvg)
+    var javaTable = in2.window((new SlidingWindow(4.rows, 2.rows)).as("w"))
+      .groupBy("w, string")
+      .select("string, myCountFun(string), int.sum, weightAvgFun(long, int), " +
+                "weightAvgFun(int, int)")
+
+    // Scala API
+    val myCountFun = new CountAggFunction
+    val weightAvgFun = new WeightedAvg
+    var scalaTable = in1.window(Slide over 4.rows every 2.rows as 'w)
+      .groupBy('w, 'string)
+      .select('string, myCountFun('string), 'int.sum, weightAvgFun('long, 'int),
+              weightAvgFun('int, 'int))
+
+    val helper = new TableTestBase
+    helper.verifyTableEquals(scalaTable, javaTable)
   }
 }
 

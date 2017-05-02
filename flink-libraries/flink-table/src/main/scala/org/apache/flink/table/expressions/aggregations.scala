@@ -29,6 +29,7 @@ import org.apache.flink.table.functions.AggregateFunction
 import org.apache.flink.table.functions.utils.AggSqlFunction
 import org.apache.flink.table.typeutils.TypeCheckUtils
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo
+import org.apache.flink.api.java.typeutils.TypeExtractor
 import org.apache.flink.table.calcite.FlinkTypeFactory
 import org.apache.flink.table.functions.utils.UserDefinedFunctionUtils.{getAccumulateMethodSignature, signatureToString, signaturesToString}
 import org.apache.flink.table.validate.{ValidationFailure, ValidationResult, ValidationSuccess}
@@ -142,8 +143,8 @@ case class Avg(child: Expression) extends Aggregation {
   }
 }
 
-case class UDAGGFunctionCall[T: TypeInformation, ACC](
-    aggregateFunction: AggregateFunction[T, ACC],
+case class UDAGGFunctionCall(
+    aggregateFunction: AggregateFunction[_, _],
     args: Seq[Expression])
   extends Aggregation {
 
@@ -154,12 +155,13 @@ case class UDAGGFunctionCall[T: TypeInformation, ACC](
     if (args.length < 1) {
       throw new TableException("Invalid constructor params")
     }
-    val agg = args.head.asInstanceOf[AggregateFunction[T, ACC]]
+    val agg = args.head.asInstanceOf[AggregateFunction[_, _]]
     val arg = args.last.asInstanceOf[Seq[Expression]]
     new UDAGGFunctionCall(agg, arg).asInstanceOf[this.type]
   }
 
-  override def resultType: TypeInformation[_] = implicitly[TypeInformation[T]]
+  override def resultType: TypeInformation[_] = TypeExtractor.createTypeInfo(
+    aggregateFunction, classOf[AggregateFunction[_, _]], aggregateFunction.getClass, 0)
 
   override def validateInput(): ValidationResult = {
     val signature = children.map(_.resultType)
@@ -188,5 +190,15 @@ case class UDAGGFunctionCall[T: TypeInformation, ACC](
                    aggregateFunction,
                    resultType,
                    typeFactory)
+  }
+
+  override private[flink] def toRexNode(implicit relBuilder: RelBuilder): RexNode = {
+    val typeFactory = relBuilder.getTypeFactory.asInstanceOf[FlinkTypeFactory]
+    relBuilder.call(
+      AggSqlFunction("UDAGG", // tableAPI parser does not really use this
+                     aggregateFunction,
+                     resultType,
+                     typeFactory),
+      args.map(_.toRexNode): _*)
   }
 }
